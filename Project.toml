@@ -1,11 +1,12 @@
 name = "RootSolvers"
 uuid = "7181ea78-2dcb-4de3-ab41-2b8ab5a31e74"
 authors = ["Charles Kawczynski <kawczynski.charles@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
+julia = "1.3"
 ForwardDiff = "~0.10.9"
