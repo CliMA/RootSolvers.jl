@@ -27,6 +27,28 @@ using RootSolvers
   end
 end
 
+@testset "RootSolvers - compact solution non-converged cases" begin
+  f(x) = x^2 - 100^2
+  f′(x) = 2x
+  for FT in [Float32, Float64]
+    sol = find_zero(f, FT(0.0), FT(1000.0), SecantMethod(), CompactSolution(), FT(1e-1), 1)
+    @test !sol.converged
+    @test sol.root isa FT
+
+    sol = find_zero(f, FT(0.0), FT(1000.0), RegulaFalsiMethod(), CompactSolution(), FT(1e-1), 1)
+    @test !sol.converged
+    @test sol.root isa FT
+
+    sol = find_zero(f, FT(1.0), NewtonsMethodAD(), CompactSolution(), FT(1e-1), 1)
+    @test !sol.converged
+    @test sol.root isa FT
+
+    sol = find_zero(f, f′, FT(1.0), NewtonsMethod(), CompactSolution(), FT(1e-1), 1)
+    @test !sol.converged
+    @test sol.root isa FT
+  end
+end
+
 @testset "RootSolvers - verbose solution correctness" begin
   f(x) = x^2 - 100^2
   f′(x) = 2x

@@ -113,7 +113,7 @@ The keyword arguments:
 function find_zero end
 
 function find_zero(f::F, x0::FT, x1::FT, ::SecantMethod, soltype::SolutionType,
-                   xatol=FT(1e-3),
+                   xatol::FT=FT(1e-3),
                    maxiters=10_000) where {F, FT<:AbstractFloat}
   y0 = f(x0)
   y1 = f(x1)
@@ -135,7 +135,7 @@ function find_zero(f::F, x0::FT, x1::FT, ::SecantMethod, soltype::SolutionType,
 end
 
 function find_zero(f::F, x0::FT, x1::FT, ::RegulaFalsiMethod, soltype::SolutionType,
-                   xatol=FT(1e-3),
+                   xatol::FT=FT(1e-3),
                    maxiters=10_000) where {F, FT<:AbstractFloat}
   y0 = f(x0)
   y1 = f(x1)
@@ -185,7 +185,7 @@ function value_deriv(f, x::FT) where {FT}
 end
 
 function find_zero(f::F, x0::FT, ::NewtonsMethodAD, soltype::SolutionType,
-                   xatol=FT(1e-3),
+                   xatol::FT=FT(1e-3),
                    maxiters=10_000) where {F, FT<:AbstractFloat}
   local y
   x_history = init_history(soltype, FT)
@@ -209,7 +209,7 @@ function find_zero(f::F, x0::FT, ::NewtonsMethodAD, soltype::SolutionType,
 end
 
 function find_zero(f::F, f′::F′, x0::FT, ::NewtonsMethod, soltype::SolutionType,
-                   xatol=1e-3,
+                   xatol::FT=FT(1e-3),
                    maxiters=10_000) where {F, F′, FT<:AbstractFloat}
   x_history = init_history(soltype, FT)
   y_history = init_history(soltype, FT)
