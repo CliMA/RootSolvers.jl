@@ -19,4 +19,4 @@ A simple GPU-capable root solver package
 [codecov-url]: https://codecov.io/gh/climate-machine/RootSolvers.jl
 
 [bors-img]: https://bors.tech/images/badge_small.svg
-[bors-url]: https://app.bors.tech/repositories/20449
+[bors-url]: https://app.bors.tech/repositories/23812
