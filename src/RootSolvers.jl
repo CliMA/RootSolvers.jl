@@ -104,8 +104,9 @@ push_history!(
                     xatol=1e-3,
                     maxiters=10_000)
 
-Finds the nearest root of `f` to `x0` and `x1`. Returns a the value of the root `x` such
-that `f(x) ≈ 0`, and a Boolean value `converged` indicating convergence.
+Attempts to find the nearest root of `f` to `x0` and `x1`. If `sol.converged ==
+true` then `sol.root` contains the value the solver converged to, i.e.,
+`f(sol.root) ≈ 0`, otherwise `sol.root` is the value of the final iteration.
 
 `method` can be one of:
 - `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
@@ -115,8 +116,9 @@ that `f(x) ≈ 0`, and a Boolean value `converged` indicating convergence.
 - `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
   - The `x1` argument is omitted for Newton's method.
   - `f′`: derivative of function `f` whose zero is sought
+- `BisectionMethod()`: FIXME
 
-The keyword arguments:
+The optional arguments:
 - `xatol` is the absolute tolerance of the input.
 - `maxiters` is the maximum number of iterations.
 """
