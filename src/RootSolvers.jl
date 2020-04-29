@@ -26,6 +26,8 @@ export find_zero,
     BisectionMethod
 export CompactSolution, VerboseSolution
 
+using KernelAbstractions.Extras: @unroll
+
 import ForwardDiff
 
 abstract type RootSolvingMethod end
@@ -123,6 +125,8 @@ true` then `sol.root` contains the value the solver converged to, i.e.,
   - `f′`: derivative of function `f` whose zero is sought
 - `BisectionMethod()`: [bisection method](https://en.wikipedia.org/wiki/Bisection_method)
   - Parameters `x0` and `x1` should bracket the root
+  - if `xatol === nothing` and `maxiters isa Val` then the bisection iteration
+    loop will be unrolled
 
 The optional arguments:
 - `xatol` is the absolute tolerance of the input.
@@ -360,6 +364,52 @@ function find_zero(
     end
 
     for i in 1:maxiters
+        x2 = (x0 + x1) / 2
+        y2 = f(x2)
+        if y2 * y0 < 0
+            x1, y1 = x2, y2
+        else
+            x0, y0 = x2, y2
+        end
+        push_history!(x_history, x2, soltype)
+        push_history!(y_history, y2, soltype)
+    end
+    x = (x0 + x1) / 2
+    return SolutionResults(
+        soltype,
+        (x0 + x1) / 2,
+        true,
+        f(x),
+        maxiters,
+        x_history,
+        y_history,
+    )
+end
+
+function find_zero(
+    f::F,
+    x0::FT,
+    x1::FT,
+    ::BisectionMethod,
+    soltype::SolutionType,
+    ::Nothing,
+    ::Val{maxiters},
+) where {maxiters, F, FT <: AbstractFloat}
+    y0, y1 = f(x0), f(x1)
+
+    x_history = init_history(soltype, FT)
+    push_history!(x_history, x0, soltype)
+    push_history!(x_history, x1, soltype)
+
+    y_history = init_history(soltype, FT)
+    push_history!(y_history, y0, soltype)
+    push_history!(y_history, y1, soltype)
+
+    if y0 * y1 > 0
+        return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
+    end
+
+    @unroll for i in 1:maxiters
         x2 = (x0 + x1) / 2
         y2 = f(x2)
         if y2 * y0 < 0

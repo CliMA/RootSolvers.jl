@@ -47,6 +47,22 @@ x̂ = 100
         @test sol.converged
         @test sol.root isa FT
         @test isapprox(sol.root, x̂, rtol = 0, atol = 1e-3)
+
+        xatol = FT(1 // 1000)
+        x0, x1 = 0, 1000
+        maxiters = ceil(Int, log2(abs(x1 - x0) / xatol))
+        sol = find_zero(
+            f,
+            FT(x0),
+            FT(x1),
+            BisectionMethod(),
+            CompactSolution(),
+            nothing,
+            Val(maxiters),
+        )
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = xatol)
     end
 end
 
@@ -165,6 +181,27 @@ end
         @test sol.converged
         @test sol.root isa FT
         @test isapprox(sol.root, x̂, rtol = 0, atol = 1e-3)
+        @test sol.err < 1e-3
+        @test sol.iter_performed + 2 ==
+              length(sol.root_history) ==
+              length(sol.err_history)
+
+
+        xatol = FT(1 // 1000)
+        x0, x1 = 0, 1000
+        maxiters = ceil(Int, log2(abs(x1 - x0) / xatol))
+        sol = find_zero(
+            f,
+            FT(x0),
+            FT(x1),
+            BisectionMethod(),
+            VerboseSolution(),
+            nothing,
+            Val(maxiters),
+        )
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = xatol)
         @test sol.err < 1e-3
         @test sol.iter_performed + 2 ==
               length(sol.root_history) ==
