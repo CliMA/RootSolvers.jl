@@ -36,6 +36,17 @@ x̂ = 100
         @test sol.converged
         @test sol.root isa FT
         @test sol.root ≈ x̂
+
+        sol = find_zero(
+            f,
+            FT(0.0),
+            FT(1000.0),
+            BisectionMethod(),
+            CompactSolution(),
+        )
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = 1e-3)
     end
 end
 
@@ -87,6 +98,11 @@ end
         )
         @test !sol.converged
         @test sol.root isa FT
+
+        sol =
+            find_zero(f, FT(0.0), FT(1.0), BisectionMethod(), CompactSolution())
+        @test !sol.converged
+        @test sol.root isa FT
     end
 end
 
@@ -136,6 +152,21 @@ end
         @test sol.err < 1e-3
         @test sol.iter_performed < 20
         @test sol.iter_performed + 1 ==
+              length(sol.root_history) ==
+              length(sol.err_history)
+
+        sol = find_zero(
+            f,
+            FT(0.0),
+            FT(1000.0),
+            BisectionMethod(),
+            VerboseSolution(),
+        )
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = 1e-3)
+        @test sol.err < 1e-3
+        @test sol.iter_performed + 2 ==
               length(sol.root_history) ==
               length(sol.err_history)
     end

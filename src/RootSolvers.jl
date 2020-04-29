@@ -19,7 +19,11 @@ converged = sol.converged
 module RootSolvers
 
 export find_zero,
-    SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
+    SecantMethod,
+    RegulaFalsiMethod,
+    NewtonsMethodAD,
+    NewtonsMethod,
+    BisectionMethod
 export CompactSolution, VerboseSolution
 
 import ForwardDiff
@@ -31,6 +35,7 @@ struct SecantMethod <: RootSolvingMethod end
 struct RegulaFalsiMethod <: RootSolvingMethod end
 struct NewtonsMethodAD <: RootSolvingMethod end
 struct NewtonsMethod <: RootSolvingMethod end
+struct BisectionMethod <: RootSolvingMethod end
 
 abstract type SolutionType end
 Base.broadcastable(soltype::SolutionType) = Ref(soltype)
@@ -116,7 +121,8 @@ true` then `sol.root` contains the value the solver converged to, i.e.,
 - `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
   - The `x1` argument is omitted for Newton's method.
   - `f′`: derivative of function `f` whose zero is sought
-- `BisectionMethod()`: FIXME
+- `BisectionMethod()`: [bisection method](https://en.wikipedia.org/wiki/Bisection_method)
+  - Parameters `x0` and `x1` should bracket the root
 
 The optional arguments:
 - `xatol` is the absolute tolerance of the input.
@@ -324,6 +330,52 @@ function find_zero(
         x0,
         false,
         y,
+        maxiters,
+        x_history,
+        y_history,
+    )
+end
+
+function find_zero(
+    f::F,
+    x0::FT,
+    x1::FT,
+    ::BisectionMethod,
+    soltype::SolutionType,
+    xatol::FT = FT(1 // 1000),
+    maxiters = ceil(Int, log2(abs(x1 - x0) / xatol)),
+) where {F, FT <: AbstractFloat}
+    y0, y1 = f(x0), f(x1)
+
+    x_history = init_history(soltype, FT)
+    push_history!(x_history, x0, soltype)
+    push_history!(x_history, x1, soltype)
+
+    y_history = init_history(soltype, FT)
+    push_history!(y_history, y0, soltype)
+    push_history!(y_history, y1, soltype)
+
+    if y0 * y1 > 0
+        return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
+    end
+
+    for i in 1:maxiters
+        x2 = (x0 + x1) / 2
+        y2 = f(x2)
+        if y2 * y0 < 0
+            x1, y1 = x2, y2
+        else
+            x0, y0 = x2, y2
+        end
+        push_history!(x_history, x2, soltype)
+        push_history!(y_history, y2, soltype)
+    end
+    x = (x0 + x1) / 2
+    return SolutionResults(
+        soltype,
+        (x0 + x1) / 2,
+        true,
+        f(x),
         maxiters,
         x_history,
         y_history,
