@@ -63,6 +63,18 @@ x̂ = 100
         @test sol.converged
         @test sol.root isa FT
         @test isapprox(sol.root, x̂, rtol = 0, atol = xatol)
+
+        sol =
+            find_zero(f, FT(0.0), FT(1000.0), BrentDekker(), CompactSolution())
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = 1e-3)
+
+        # Order of argument should not matter
+        sol2 =
+            find_zero(f, FT(1000.0), FT(0.0), BrentDekker(), CompactSolution())
+        @test sol2.converged
+        @test sol2.root === sol.root
     end
 end
 
@@ -117,6 +129,10 @@ end
 
         sol =
             find_zero(f, FT(0.0), FT(1.0), BisectionMethod(), CompactSolution())
+        @test !sol.converged
+        @test sol.root isa FT
+
+        sol = find_zero(f, FT(0.0), FT(1.0), BrentDekker(), CompactSolution())
         @test !sol.converged
         @test sol.root isa FT
     end
@@ -199,6 +215,16 @@ end
             nothing,
             Val(maxiters),
         )
+        @test sol.converged
+        @test sol.root isa FT
+        @test isapprox(sol.root, x̂, rtol = 0, atol = xatol)
+        @test sol.err < 1e-3
+        @test sol.iter_performed + 2 ==
+              length(sol.root_history) ==
+              length(sol.err_history)
+
+        sol =
+            find_zero(f, FT(0.0), FT(1000.0), BrentDekker(), VerboseSolution())
         @test sol.converged
         @test sol.root isa FT
         @test isapprox(sol.root, x̂, rtol = 0, atol = xatol)

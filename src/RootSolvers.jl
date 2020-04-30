@@ -23,7 +23,8 @@ export find_zero,
     RegulaFalsiMethod,
     NewtonsMethodAD,
     NewtonsMethod,
-    BisectionMethod
+    BisectionMethod,
+    BrentDekker
 export CompactSolution, VerboseSolution
 
 using KernelAbstractions.Extras: @unroll
@@ -38,6 +39,7 @@ struct RegulaFalsiMethod <: RootSolvingMethod end
 struct NewtonsMethodAD <: RootSolvingMethod end
 struct NewtonsMethod <: RootSolvingMethod end
 struct BisectionMethod <: RootSolvingMethod end
+struct BrentDekker <: RootSolvingMethod end
 
 abstract type SolutionType end
 Base.broadcastable(soltype::SolutionType) = Ref(soltype)
@@ -127,10 +129,22 @@ true` then `sol.root` contains the value the solver converged to, i.e.,
   - Parameters `x0` and `x1` should bracket the root
   - if `xatol === nothing` and `maxiters isa Val` then the bisection iteration
     loop will be unrolled
+- `BrentDekker()`: Brent-Dekker Method as described in Brent (1973). It is a
+  combination of bisection, secant, and inverse quadratic interpolation which is
+  safeguarded to ensure that the step never leaves a known bracket and that
+  sufficient progress is made at each iteration
+  - Parameters `x0` and `x1` should bracket the root
 
 The optional arguments:
 - `xatol` is the absolute tolerance of the input.
 - `maxiters` is the maximum number of iterations.
+
+@Book{Brent1973,
+  title={Algorithms for Minimization without Derivatives},
+  author={Brent, Richard P},
+  year={1973},
+  publisher={Prentice-Hall Englewood Cliffs, NJ, USA},
+}
 """
 function find_zero end
 
@@ -426,6 +440,143 @@ function find_zero(
         (x0 + x1) / 2,
         true,
         f(x),
+        maxiters,
+        x_history,
+        y_history,
+    )
+end
+
+# Based on the zero algorithm of  Richard P.  Brent, Algorithms for Minimization
+# without Derivatives, Prentice-Hall, Englewood Cliffs, New Jersey, 1973, 195
+# pp. (available online at
+# https://maths-people.anu.edu.au/~brent/pub/pub011.html)
+function find_zero(
+    f::F,
+    a::FT,
+    b::FT,
+    ::BrentDekker,
+    soltype::SolutionType,
+    xatol::FT = FT(1e-3),
+    maxiters = 10_000,
+) where {F, FT <: AbstractFloat}
+    x_history = init_history(soltype, FT)
+    y_history = init_history(soltype, FT)
+
+    # Evaluate the function 
+    fa, fb = f(a), f(b)
+
+    push_history!(y_history, fa, soltype)
+    push_history!(x_history, a, soltype)
+    push_history!(y_history, fb, soltype)
+    push_history!(x_history, b, soltype)
+
+    # Not a bracket
+    if fa * fb > 0
+        return SolutionResults(soltype, b, false, fb, 1, x_history, y_history)
+    end
+
+    # Initialize the other side of the bracket
+    c, fc = a, fa
+
+    # below d is the current step and e is previous step
+    d = e = b - a
+
+    macheps = eps(FT)
+
+    # solution is in bracket [c, b] and a is the previous b
+    for i in 1:maxiters
+
+        # `b` should be best guess (even if that means we don't update value)
+        # This also resets `a` (the previous `b`) to be the same as `c
+        if abs(fc) < abs(fb)
+            a, b, c = b, c, b
+            fa, fb, fc = fb, fc, fb
+        end
+
+        push_history!(y_history, fb, soltype)
+        push_history!(x_history, b, soltype)
+
+        # tol is used to make sure that we are properly scaled with respect to
+        # the input
+        tol = 2macheps * abs(b) + xatol
+
+        # bisection step size
+        m = (c - b) / 2
+
+        # If the bracket is small enough or we hit the root
+        if (abs(m) < tol || fb == 0)
+            return SolutionResults(
+                soltype,
+                b,
+                true,
+                fb,
+                i,
+                x_history,
+                y_history,
+            )
+        end
+
+        # if the step we took last time `e` is smaller than the tolerance OR if
+        # our function really increased just do bisection
+        if abs(e) < tol || abs(fa) < abs(fb)
+            d = e = m
+        else
+            # do inverse quadratic interpolation if we can
+            # otherwise do secant
+            # The use of p & q is to make things more floating point stable
+
+            r = fb / fc
+            if a ≠ c
+                s = fb / fa
+                q = fa / fc
+                p = s * (2m * q * (q - r) - (b - a) * (r - 1))
+                q = (q - 1) * (r - 1) * (s - 1)
+            else
+                p = 2m * r
+                q = 1 - r
+            end
+
+            # either p or q has to flip signs, since we want p to be positive
+            # below we prefer to flip the sign of q
+            p > 0 ? (q = -q) : (p = -p)
+
+            # As long as the step keeps us in the bracket and the step is not too
+            # large we accept the secant / quadratic step
+            #
+            # The first condition ensures that the step p / q cause the solution
+            # to be in the interval [b, b + (3/4)*(a-b)], e.g, we do not get too
+            # close to a which is the worst of the two sides.
+            #
+            # The second condition ensures that the step is at least half as big
+            # as the previous step, e.g., p / q < e / 2 (otherwise we are not
+            # converging quickly so we should just bisect)
+            if 2p < 3m * q - abs(tol * q) && p < abs(e * q / 2)
+                e, d = d, p / q
+            else
+                d = e = m
+            end
+        end
+
+        # Save the last step
+        a, fa = b, fb
+
+        # As long as the step isn't too small accept it, otherwise take a `tol`
+        # sizes step in the correct direction
+        b = b + (abs(d) > tol ? d : (m > 0 ? tol : -tol))
+        fb = f(b)
+
+        # if fb and fc have same sign then really a, b bracket the root
+        if (fb > 0) == (fc > 0)
+            c, fc = a, fa
+            d = e = b - a
+        end
+    end
+
+    return SolutionResults(
+        soltype,
+        b,
+        false,
+        fb,
         maxiters,
         x_history,
         y_history,
