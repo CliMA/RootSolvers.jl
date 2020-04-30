@@ -21,6 +21,7 @@ module RootSolvers
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
+export ResidualTolerance, SolutionTolerance
 
 import ForwardDiff
 
@@ -61,7 +62,6 @@ end
 SolutionResults(soltype::VerboseSolution, args...) =
     VerboseSolutionResults(args...)
 
-
 """
     CompactSolution <: SolutionType
 
@@ -95,6 +95,39 @@ push_history!(
     ::CompactSolution,
 ) where {FT <: AbstractFloat} = nothing
 
+abstract type AbstractTolerance end
+
+"""
+    ResidualTolerance
+
+A tolerance type based on the residual of the equation ``f(x) = 0``
+"""
+struct ResidualTolerance{FT} <: AbstractTolerance
+    tol::FT
+end
+
+"""
+    (tol::ResidualTolerance)(x1, x2, y)
+
+Evaluates residual tolerance, based on ``|f(x)|``
+"""
+(tol::ResidualTolerance)(x1, x2, y) = abs(y) < tol.tol
+
+"""
+    SolutionTolerance
+
+A tolerance type based on the solution ``x`` of the equation ``f(x) = 0``
+"""
+struct SolutionTolerance{FT} <: AbstractTolerance
+    tol::FT
+end
+
+"""
+    (tol::SolutionTolerance)(x1, x2, y)
+
+Evaluates solution tolerance, based on ``|x2-x1|``
+"""
+(tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
 
 # TODO: CuArrays.jl has trouble with isapprox on 1.1
 # we use simple checks for now, will switch to relative checks later.
@@ -128,9 +161,10 @@ function find_zero(
     x1::FT,
     ::SecantMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, IT} = 10_000,
+) where {F, FT <: AbstractFloat, IT <: Int}
+    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
     y0 = f(x0)
     y1 = f(x1)
     x_history = init_history(soltype, x0)
@@ -143,7 +177,7 @@ function find_zero(
         push_history!(y_history, y0, soltype)
         x1 -= y1 * Δx / Δy
         y1 = f(x1)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y1)
             return SolutionResults(
                 soltype,
                 x1,
@@ -172,9 +206,10 @@ function find_zero(
     x1::FT,
     ::RegulaFalsiMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, IT} = 10_000,
+) where {F, FT <: AbstractFloat, IT <: Int}
+    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
     y0 = f(x0)
     y1 = f(x1)
     @assert y0 * y1 < 0
@@ -188,7 +223,7 @@ function find_zero(
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
         if y * y0 < 0
-            if abs(x - x1) <= xatol
+            if tol(x, x1, y)
                 return SolutionResults(
                     soltype,
                     x,
@@ -205,7 +240,7 @@ function find_zero(
             end
             lastside = +1
         else
-            if abs(x0 - x) <= xatol
+            if tol(x0, x, y)
                 return SolutionResults(
                     soltype,
                     x,
@@ -243,9 +278,10 @@ function find_zero(
     x0::FT,
     ::NewtonsMethodAD,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, IT} = 10_000,
+) where {F, FT <: AbstractFloat, IT <: Int}
+    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
     local y
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
@@ -259,7 +295,7 @@ function find_zero(
         x1 = x0 - y / y′
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y)
             return SolutionResults(
                 soltype,
                 x1,
@@ -289,9 +325,10 @@ function find_zero(
     x0::FT,
     ::NewtonsMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, F′, FT <: AbstractFloat}
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, IT} = 10_000,
+) where {F, F′, FT <: AbstractFloat, IT <: Int}
+    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution
@@ -304,7 +341,7 @@ function find_zero(
         x1 = x0 - y / y′
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y)
             return SolutionResults(
                 soltype,
                 x1,
