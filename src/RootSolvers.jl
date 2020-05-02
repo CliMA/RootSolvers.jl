@@ -31,9 +31,9 @@ export ResidualTolerance, SolutionTolerance
 import ForwardDiff
 
 # Input types
-const FTypes = Union{AbstractFloat,AbstractArray}
+const FTypes = Union{AbstractFloat, AbstractArray}
 
-abstract type RootSolvingMethod{FT<:FTypes} end
+abstract type RootSolvingMethod{FT <: FTypes} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
 """
@@ -79,7 +79,7 @@ end
 # Fields
 $(FIELDS)
 """
-struct NewtonsMethod{FT,F′<:Function} <: RootSolvingMethod{FT}
+struct NewtonsMethod{FT, F′ <: Function} <: RootSolvingMethod{FT}
     "initial guess"
     x0::FT
     "`f′` derivative of function `f` whose zero is sought"
@@ -164,7 +164,7 @@ function push_history!(
     nothing
 end
 
-abstract type AbstractTolerance{FT<:FTypes} end
+abstract type AbstractTolerance{FT <: FTypes} end
 Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
 """
@@ -235,8 +235,8 @@ function find_zero(
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Union{Nothing, Int} = 10_000,
-) where {FT<:FTypes, F<:Function}
-    if tol===nothing
+) where {FT <: FTypes, F <: Function}
+    if tol === nothing
         tol = SolutionTolerance{eltype(FT)}(1e-3)
     end
     return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
@@ -250,11 +250,19 @@ function Broadcast.broadcasted(
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Union{Nothing, Int} = 10_000,
-    ) where {FT<:FTypes, F}
-    if tol===nothing
+) where {FT <: FTypes, F}
+    if tol === nothing
         tol = SolutionTolerance{eltype(FT)}(1e-3)
     end
-  return broadcast(find_zero, f, method, method_args(method)..., soltype, tol, maxiters)
+    return broadcast(
+        find_zero,
+        f,
+        method,
+        method_args(method)...,
+        soltype,
+        tol,
+        maxiters,
+    )
 end
 
 ####
@@ -278,7 +286,7 @@ function find_zero(
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F<:Function, FT<:FTypes}
+) where {F <: Function, FT <: FTypes}
     y0 = f(x0)
     y1 = f(x1)
     x_history = init_history(soltype, x0)
@@ -324,7 +332,7 @@ function find_zero(
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F<:Function, FT}
+) where {F <: Function, FT}
     y0 = f(x0)
     y1 = f(x1)
     @assert y0 * y1 < 0
@@ -397,7 +405,7 @@ function find_zero(
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F<:Function, FT}
+) where {F <: Function, FT}
     local y
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
@@ -445,7 +453,7 @@ function find_zero(
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F<:Function, F′<:Function, FT, IT <: Int}
+) where {F <: Function, F′ <: Function, FT, IT <: Int}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution

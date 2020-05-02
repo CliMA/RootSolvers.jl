@@ -19,8 +19,8 @@ CuArrays.allowscalar(false)
 
         # Make isbits array, so that `method` remains isbits
         N = 5
-        _X0 = SArray{Tuple{N,N}, FT}(rand(FT, N, N))
-        _X1 = SArray{Tuple{N,N}, FT}(rand(FT, N, N) .+ 1000)
+        _X0 = SArray{Tuple{N, N}, FT}(rand(FT, N, N))
+        _X1 = SArray{Tuple{N, N}, FT}(rand(FT, N, N) .+ 1000)
 
         # Move to the GPU
         X0 = adapt(CuArray, _X0)
@@ -30,12 +30,11 @@ CuArrays.allowscalar(false)
             SecantMethod(X0, X1),
             RegulaFalsiMethod(X0, X1),
             NewtonsMethodAD(X0),
-            NewtonsMethod(X0, f′)
-            ]
-
+            NewtonsMethod(X0, f′),
+        ]
             sol = RootSolvers.find_zero.(Ref(f), method, CompactSolution())
-            converged = map(x->x.converged, sol)
-            X_roots = map(x->x.root, sol)
+            converged = map(x -> x.converged, sol)
+            X_roots = map(x -> x.root, sol)
             @test all(converged)
             @test eltype(X_roots) == eltype(X0)
             @test all(X_roots .≈ 100)
