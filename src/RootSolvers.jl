@@ -7,16 +7,21 @@ equations. See [`find_zero`](@ref).
 
 ## Example
 
-```
-using RootSolvers
+```julia
+julia> using RootSolvers
 
-sol = find_zero(x -> x^2 - 100^2, 0.0, 1000.0, SecantMethod(), CompactSolution())
-x_root = sol.root
-converged = sol.converged
+julia> sol = find_zero(x -> x^2 - 100^2,
+                       SecantMethod{Float64}(0.0, 1000.0),
+                       CompactSolution());
+
+julia> sol
+RootSolvers.CompactSolutionResults{Float64}(99.99999999994358, true)
 ```
 
 """
 module RootSolvers
+
+using DocStringExtensions: FIELDS
 
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
@@ -25,13 +30,61 @@ export ResidualTolerance, SolutionTolerance
 
 import ForwardDiff
 
-abstract type RootSolvingMethod end
+# Input types
+const FTypes = Union{AbstractFloat, AbstractArray}
+
+abstract type RootSolvingMethod{FT <: FTypes} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
-struct SecantMethod <: RootSolvingMethod end
-struct RegulaFalsiMethod <: RootSolvingMethod end
-struct NewtonsMethodAD <: RootSolvingMethod end
-struct NewtonsMethod <: RootSolvingMethod end
+"""
+    SecantMethod
+
+# Fields
+$(FIELDS)
+"""
+struct SecantMethod{FT} <: RootSolvingMethod{FT}
+    "lower"
+    x0::FT
+    "upper bound"
+    x1::FT
+end
+
+"""
+    RegulaFalsiMethod
+
+# Fields
+$(FIELDS)
+"""
+struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
+    "lower bound"
+    x0::FT
+    "upper bound"
+    x1::FT
+end
+
+"""
+    NewtonsMethodAD
+
+# Fields
+$(FIELDS)
+"""
+struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
+    "initial guess"
+    x0::FT
+end
+
+"""
+    NewtonsMethod
+
+# Fields
+$(FIELDS)
+"""
+struct NewtonsMethod{FT, F′ <: Function} <: RootSolvingMethod{FT}
+    "initial guess"
+    x0::FT
+    "`f′` derivative of function `f` whose zero is sought"
+    f′::F′
+end
 
 abstract type SolutionType end
 Base.broadcastable(soltype::SolutionType) = Ref(soltype)
@@ -45,6 +98,12 @@ struct VerboseSolution <: SolutionType end
 
 abstract type AbstractSolutionResults{AbstractFloat} end
 
+"""
+    VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Result returned from `find_zero` when
+`VerboseSolution` is passed as the `soltype`.
+"""
 struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -69,6 +128,12 @@ Used to return a [`CompactSolutionResults`](@ref)
 """
 struct CompactSolution <: SolutionType end
 
+"""
+    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Result returned from `find_zero` when
+`CompactSolution` is passed as the `soltype`.
+"""
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -84,25 +149,30 @@ init_history(::VerboseSolution, ::Type{FT}) where {FT <: AbstractFloat} = FT[]
 init_history(::CompactSolution, ::Type{FT}) where {FT <: AbstractFloat} =
     nothing
 
-push_history!(
+function push_history!(
     history::Vector{FT},
     x::FT,
     ::VerboseSolution,
-) where {FT <: AbstractFloat} = push!(history, x)
-push_history!(
+) where {FT <: AbstractFloat}
+    push!(history, x)
+end
+function push_history!(
     history::Nothing,
     x::FT,
     ::CompactSolution,
-) where {FT <: AbstractFloat} = nothing
+) where {FT <: AbstractFloat}
+    nothing
+end
 
-abstract type AbstractTolerance end
+abstract type AbstractTolerance{FT <: FTypes} end
+Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
 """
     ResidualTolerance
 
 A tolerance type based on the residual of the equation ``f(x) = 0``
 """
-struct ResidualTolerance{FT} <: AbstractTolerance
+struct ResidualTolerance{FT} <: AbstractTolerance{FT}
     tol::FT
 end
 
@@ -118,7 +188,7 @@ Evaluates residual tolerance, based on ``|f(x)|``
 
 A tolerance type based on the solution ``x`` of the equation ``f(x) = 0``
 """
-struct SolutionTolerance{FT} <: AbstractTolerance
+struct SolutionTolerance{FT} <: AbstractTolerance{FT}
     tol::FT
 end
 
@@ -133,38 +203,90 @@ Evaluates solution tolerance, based on ``|x2-x1|``
 # we use simple checks for now, will switch to relative checks later.
 
 """
-    sol = find_zero(f[, f′], x0[, x1], method, solutiontype,
-                    xatol=1e-3,
-                    maxiters=10_000)
+    sol = find_zero(
+            f::F,
+            method::RootSolvingMethod{FT},
+            soltype::SolutionType,
+            tol::Union{Nothing, AbstractTolerance} = nothing,
+            maxiters::Union{Nothing, Int} = 10_000,
+            )
 
-Finds the nearest root of `f` to `x0` and `x1`. Returns a the value of the root `x` such
+Finds the nearest root of `f`. Returns a the value of the root `x` such
 that `f(x) ≈ 0`, and a Boolean value `converged` indicating convergence.
 
-`method` can be one of:
-- `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
-- `RegulaFalsiMethod()`: [Regula Falsi method](https://en.wikipedia.org/wiki/False_position_method#The_regula_falsi_(false_position)_method).
-- `NewtonsMethodAD()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method) using Automatic Differentiation
-  - The `x1` argument is omitted for Newton's method.
-- `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
-  - The `x1` argument is omitted for Newton's method.
-  - `f′`: derivative of function `f` whose zero is sought
-
-The keyword arguments:
-- `xatol` is the absolute tolerance of the input.
+ - `f` function of the equation to find the root
+ - `method` can be one of:
+    - `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
+    - `RegulaFalsiMethod()`: [Regula Falsi method](https://en.wikipedia.org/wiki/False_position_method#The_regula_falsi_(false_position)_method)
+    - `NewtonsMethodAD()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method) using Automatic Differentiation
+    - `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
+- `soltype` is a solution type which may be one of:
+      `CompactSolution` GPU-capable. Solution has `converged` and `root` only, see [`CompactSolutionResults`](@ref)
+      `VerboseSolution` CPU-only. Solution has additional diagnostics, see [`VerboseSolutionResults`](@ref)
+- `tol` is a tolerance type to determine when to stop iterations.
 - `maxiters` is the maximum number of iterations.
 """
 function find_zero end
 
+# Main entry point: Dispatch to specific method
 function find_zero(
     f::F,
-    x0::FT,
-    x1::FT,
-    ::SecantMethod,
+    method::RootSolvingMethod{FT},
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, IT} = 10_000,
-) where {F, FT <: AbstractFloat, IT <: Int}
-    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
+    maxiters::Union{Nothing, Int} = 10_000,
+) where {FT <: FTypes, F <: Function}
+    if tol === nothing
+        tol = SolutionTolerance{eltype(FT)}(1e-3)
+    end
+    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
+end
+
+# Allow broadcast:
+function Broadcast.broadcasted(
+    ::typeof(find_zero),
+    f::F,
+    method::RootSolvingMethod{FT},
+    soltype::SolutionType,
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, Int} = 10_000,
+) where {FT <: FTypes, F}
+    if tol === nothing
+        tol = SolutionTolerance{eltype(FT)}(1e-3)
+    end
+    return broadcast(
+        find_zero,
+        f,
+        method,
+        method_args(method)...,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+####
+#### Numerical methods
+####
+
+"""
+    method_args(method::RootSolvingMethod)
+
+Return tuple of positional args for `RootSolvingMethod`.
+"""
+function method_args end
+
+method_args(method::SecantMethod) = (method.x0, method.x1)
+
+function find_zero(
+    f::F,
+    ::SecantMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT <: FTypes}
     y0 = f(x0)
     y1 = f(x1)
     x_history = init_history(soltype, x0)
@@ -200,16 +322,17 @@ function find_zero(
     )
 end
 
+method_args(method::RegulaFalsiMethod) = (method.x0, method.x1)
+
 function find_zero(
     f::F,
+    ::RegulaFalsiMethod,
     x0::FT,
     x1::FT,
-    ::RegulaFalsiMethod,
     soltype::SolutionType,
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, IT} = 10_000,
-) where {F, FT <: AbstractFloat, IT <: Int}
-    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT}
     y0 = f(x0)
     y1 = f(x1)
     @assert y0 * y1 < 0
@@ -273,15 +396,16 @@ function value_deriv(f, x::FT) where {FT}
     ForwardDiff.value(tag, y), ForwardDiff.partials(tag, y, 1)
 end
 
+method_args(method::NewtonsMethodAD) = (method.x0,)
+
 function find_zero(
     f::F,
-    x0::FT,
     ::NewtonsMethodAD,
+    x0::FT,
     soltype::SolutionType,
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, IT} = 10_000,
-) where {F, FT <: AbstractFloat, IT <: Int}
-    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT}
     local y
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
@@ -319,16 +443,17 @@ function find_zero(
     )
 end
 
+method_args(method::NewtonsMethod) = (method.x0, method.f′)
+
 function find_zero(
     f::F,
-    f′::F′,
-    x0::FT,
     ::NewtonsMethod,
+    x0::FT,
+    f′::F′,
     soltype::SolutionType,
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, IT} = 10_000,
-) where {F, F′, FT <: AbstractFloat, IT <: Int}
-    tol === nothing && (tol = SolutionTolerance{FT}(1e-3))
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, F′ <: Function, FT, IT <: Int}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution

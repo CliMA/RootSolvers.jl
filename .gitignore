@@ -12,6 +12,7 @@
 docs/build/
 docs/site/
 
+.dev/**/Manifest.toml
 env/**/Manifest.toml
 *.jl.*.cov
 *.jl.mem
