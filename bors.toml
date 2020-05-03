@@ -1,5 +1,6 @@
 status = [
-  "climate-machine.RootSolvers.jl"
+  "climate-machine.RootSolvers.jl",
+  "docs-build"
 ]
 delete_merged_branches = true
 timeout_sec = 86400
