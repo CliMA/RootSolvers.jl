@@ -9,6 +9,7 @@
 *.png
 
 !docs/src/assets/*.png
+docs/**/Manifest.toml
 docs/build/
 docs/site/
 
