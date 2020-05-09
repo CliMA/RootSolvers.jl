@@ -10,13 +10,13 @@ A simple GPU-capable root solver package
 | **Bors**             | [![Bors enabled][bors-img]][bors-url]         |
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://climate-machine.github.io/RootSolvers.jl/dev/
+[docs-dev-url]: https://CliMA.github.io/RootSolvers.jl/dev/
 
 [azure-img]: https://dev.azure.com/climate-machine/RootSolvers.jl/_apis/build/status/climate-machine.RootSolvers.jl?branchName=master
 [azure-url]: https://dev.azure.com/climate-machine/RootSolvers.jl/_build/latest?definitionId=1&branchName=master
 
-[codecov-img]: https://codecov.io/gh/climate-machine/RootSolvers.jl/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/climate-machine/RootSolvers.jl
+[codecov-img]: https://codecov.io/gh/CliMA/RootSolvers.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/CliMA/RootSolvers.jl
 
 [bors-img]: https://bors.tech/images/badge_small.svg
-[bors-url]: https://app.bors.tech/repositories/23812
+[bors-url]: https://app.bors.tech/repositories/24782

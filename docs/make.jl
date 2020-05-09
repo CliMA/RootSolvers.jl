@@ -34,7 +34,7 @@ makedocs(
 )
 
 deploydocs(
-    repo = "github.com/climate-machine/RootSolvers.jl.git",
+    repo = "github.com/CliMA/RootSolvers.jl.git",
     target = "build",
     push_preview = true,
 )
