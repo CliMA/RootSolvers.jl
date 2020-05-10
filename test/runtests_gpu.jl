@@ -10,34 +10,28 @@ using CUDAdrv
 using CUDAnative
 using CuArrays
 
+include("test_helper.jl")
+
 CuArrays.allowscalar(false)
+
+filter!(x->x.x_init isa AbstractArray, problem_list) # only grab array problems
+
 @testset "GPU tests" begin
-    f(x) = x^2 - 100^2
-    f′(x) = 2x
-    x̃ = 100
-    for FT in [Float32, Float64]
-
-        # Make isbits array, so that `method` remains isbits
-        N = 5
-        _X0 = SArray{Tuple{N, N}, FT}(rand(FT, N, N))
-        _X1 = SArray{Tuple{N, N}, FT}(rand(FT, N, N) .+ 1000)
-
-        # Move to the GPU
-        X0 = adapt(CuArray, _X0)
-        X1 = adapt(CuArray, _X1)
-
-        for method in [
-            SecantMethod(X0, X1),
-            RegulaFalsiMethod(X0, X1),
-            NewtonsMethodAD(X0),
-            NewtonsMethod(X0, f′),
-        ]
-            sol = RootSolvers.find_zero.(Ref(f), method, CompactSolution())
-            converged = map(x -> x.converged, sol)
-            X_roots = map(x -> x.root, sol)
-            @test all(converged)
-            @test eltype(X_roots) == eltype(X0)
-            @test all(X_roots .≈ 100)
+    for problem in problem_list
+        FT = typeof(problem.x̃)
+        for tol in get_tolerances(FT)
+            x_init = adapt(CuArray, problem.x_init)
+            x_lower = adapt(CuArray, problem.x_lower)
+            x_upper = adapt(CuArray, problem.x_upper)
+            for method in get_methods(x_init, x_lower, x_upper, problem.f′)
+                sol = RootSolvers.find_zero.(Ref(problem.f), method, CompactSolution(), tol)
+                converged = map(x -> x.converged, sol)
+                X_roots = map(x -> x.root, sol)
+                @test isbits(method)
+                @test all(converged)
+                @test eltype(X_roots) == eltype(x_init)
+                @test all(X_roots .≈ problem.x̃)
+            end
         end
     end
 end
