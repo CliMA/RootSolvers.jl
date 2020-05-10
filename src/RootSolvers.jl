@@ -26,7 +26,7 @@ using DocStringExtensions: FIELDS
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
-export ResidualTolerance, SolutionTolerance
+export AbstractTolerance, ResidualTolerance, SolutionTolerance
 
 import ForwardDiff
 
