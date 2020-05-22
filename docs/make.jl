@@ -10,6 +10,7 @@ using RootSolvers, Documenter
 pages = Any[
     "Home" => "index.md",
     "Installation" => "Installation.md",
+    "API" => "API.md",
 ]
 
 mathengine = MathJax(Dict(
@@ -28,8 +29,9 @@ format = Documenter.HTML(
 makedocs(
     sitename = "RootSolvers.jl",
     format = format,
+    strict = true,
     clean = true,
-    modules = [Documenter, RootSolvers],
+    modules = [RootSolvers],
     pages = pages,
 )
 
