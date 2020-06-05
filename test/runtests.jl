@@ -1,4 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", "env", "test"))
 using Test
 using RootSolvers
 using StaticArrays
