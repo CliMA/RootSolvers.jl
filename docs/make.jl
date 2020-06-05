@@ -1,10 +1,3 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "..", "env", "Plots")) # add Plots env
-
-using Pkg
-Pkg.activate(@__DIR__)
-Pkg.instantiate(;verbose=true)
-Pkg.develop(PackageSpec(path=joinpath(@__DIR__, "..")))
-
 using RootSolvers, Documenter
 
 pages = Any[
