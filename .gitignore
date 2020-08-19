@@ -1,3 +1,4 @@
+*.DS_Store
 *.jl.cov
 *.vtk
 *.dat
@@ -6,11 +7,12 @@
 *.pvtu
 *.swp
 *.png
+
 !docs/src/assets/*.png
-*.DS_Store
+docs/**/Manifest.toml
 docs/build/
-data/
 docs/site/
+
+Manifest.toml
 *.jl.*.cov
 *.jl.mem
-deps/deps.jl

@@ -1,0 +1,7 @@
+[deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+CUDAdrv = "c5f51814-7f29-56b8-a69c-e4d8f6be1fde"
+CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17"
+CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
+RootSolvers = "7181ea78-2dcb-4de3-ab41-2b8ab5a31e74"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"

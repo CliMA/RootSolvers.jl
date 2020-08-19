@@ -7,16 +7,21 @@ equations. See [`find_zero`](@ref).
 
 ## Example
 
-```
-using RootSolvers
+```julia
+julia> using RootSolvers
 
-sol = find_zero(x -> x^2 - 100^2, 0.0, 1000.0, SecantMethod(), CompactSolution())
-x_root = sol.root
-converged = sol.converged
+julia> sol = find_zero(x -> x^2 - 100^2,
+                       SecantMethod{Float64}(0.0, 1000.0),
+                       CompactSolution());
+
+julia> sol
+RootSolvers.CompactSolutionResults{Float64}(99.99999999994358, true)
 ```
 
 """
 module RootSolvers
+
+using DocStringExtensions: FIELDS
 
 export find_zero,
     SecantMethod,
@@ -26,20 +31,91 @@ export find_zero,
     BisectionMethod,
     BrentDekker
 export CompactSolution, VerboseSolution
+export AbstractTolerance, ResidualTolerance, SolutionTolerance
 
 using KernelAbstractions.Extras: @unroll
 
 import ForwardDiff
 
-abstract type RootSolvingMethod end
+# Input types
+const FTypes = Union{AbstractFloat, AbstractArray}
+
+abstract type RootSolvingMethod{FT <: FTypes} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
-struct SecantMethod <: RootSolvingMethod end
-struct RegulaFalsiMethod <: RootSolvingMethod end
-struct NewtonsMethodAD <: RootSolvingMethod end
-struct NewtonsMethod <: RootSolvingMethod end
-struct BisectionMethod <: RootSolvingMethod end
-struct BrentDekker <: RootSolvingMethod end
+"""
+    SecantMethod
+
+# Fields
+$(FIELDS)
+"""
+struct SecantMethod{FT} <: RootSolvingMethod{FT}
+    "lower bound"
+    x0::FT
+    "upper bound"
+    x1::FT
+end
+
+"""
+    RegulaFalsiMethod
+
+# Fields
+$(FIELDS)
+"""
+struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
+    "lower bound"
+    x0::FT
+    "upper bound"
+    x1::FT
+end
+
+"""
+    NewtonsMethodAD
+
+# Fields
+$(FIELDS)
+"""
+struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
+    "initial guess"
+    x0::FT
+end
+
+"""
+    NewtonsMethod
+
+# Fields
+$(FIELDS)
+"""
+struct NewtonsMethod{FT, F′ <: Function} <: RootSolvingMethod{FT}
+    "initial guess"
+    x0::FT
+    "`f′` derivative of function `f` whose zero is sought"
+    f′::F′
+end
+
+"""
+    BisectionMethod
+
+# Fields
+$(FIELDS)
+"""
+struct BisectionMethod{FT} <: RootSolvingMethod{FT}
+    x0::FT
+    x1::FT
+end
+
+"""
+    BrentDekker
+
+# Fields
+$(FIELDS)
+"""
+struct BrentDekker{FT} <: RootSolvingMethod{FT}
+    "lower bound"
+    a::FT
+    "upper bound"
+    b::FT
+end
 
 abstract type SolutionType end
 Base.broadcastable(soltype::SolutionType) = Ref(soltype)
@@ -53,6 +129,12 @@ struct VerboseSolution <: SolutionType end
 
 abstract type AbstractSolutionResults{AbstractFloat} end
 
+"""
+    VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Result returned from `find_zero` when
+`VerboseSolution` is passed as the `soltype`.
+"""
 struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -70,7 +152,6 @@ end
 SolutionResults(soltype::VerboseSolution, args...) =
     VerboseSolutionResults(args...)
 
-
 """
     CompactSolution <: SolutionType
 
@@ -78,6 +159,12 @@ Used to return a [`CompactSolutionResults`](@ref)
 """
 struct CompactSolution <: SolutionType end
 
+"""
+    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Result returned from `find_zero` when
+`CompactSolution` is passed as the `soltype`.
+"""
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -93,50 +180,104 @@ init_history(::VerboseSolution, ::Type{FT}) where {FT <: AbstractFloat} = FT[]
 init_history(::CompactSolution, ::Type{FT}) where {FT <: AbstractFloat} =
     nothing
 
-push_history!(
+function push_history!(
     history::Vector{FT},
     x::FT,
     ::VerboseSolution,
-) where {FT <: AbstractFloat} = push!(history, x)
-push_history!(
+) where {FT <: AbstractFloat}
+    push!(history, x)
+end
+function push_history!(
     history::Nothing,
     x::FT,
     ::CompactSolution,
-) where {FT <: AbstractFloat} = nothing
+) where {FT <: AbstractFloat}
+    nothing
+end
 
+abstract type AbstractTolerance{FT <: FTypes} end
+Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
+
+"""
+    ResidualTolerance
+
+A tolerance type based on the residual of the equation ``f(x) = 0``
+"""
+struct ResidualTolerance{FT} <: AbstractTolerance{FT}
+    tol::FT
+end
+
+"""
+    (tol::ResidualTolerance)(x1, x2, y)
+
+Evaluates residual tolerance, based on ``|f(x)|``
+"""
+(tol::ResidualTolerance)(x1, x2, y) = abs(y) < tol.tol
+
+"""
+    SolutionTolerance
+
+A tolerance type based on the solution ``x`` of the equation ``f(x) = 0``
+"""
+struct SolutionTolerance{FT} <: AbstractTolerance{FT}
+    tol::FT
+end
+
+"""
+    (tol::SolutionTolerance)(x1, x2, y)
+
+Evaluates solution tolerance, based on ``|x2-x1|``
+"""
+(tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
 
 # TODO: CuArrays.jl has trouble with isapprox on 1.1
 # we use simple checks for now, will switch to relative checks later.
 
 """
-    sol = find_zero(f[, f′], x0[, x1], method, solutiontype,
-                    xatol=1e-3,
-                    maxiters=10_000)
+    sol = find_zero(
+            f::F,
+            method::RootSolvingMethod{FT},
+            soltype::SolutionType,
+            tol::Union{Nothing, AbstractTolerance} = nothing,
+            maxiters::Union{Nothing, Int} = 10_000,
+            )
 
 Attempts to find the nearest root of `f` to `x0` and `x1`. If `sol.converged ==
 true` then `sol.root` contains the value the solver converged to, i.e.,
 `f(sol.root) ≈ 0`, otherwise `sol.root` is the value of the final iteration.
 
-`method` can be one of:
-- `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
-- `RegulaFalsiMethod()`: [Regula Falsi method](https://en.wikipedia.org/wiki/False_position_method#The_regula_falsi_(false_position)_method).
-- `NewtonsMethodAD()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method) using Automatic Differentiation
-  - The `x1` argument is omitted for Newton's method.
-- `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
-  - The `x1` argument is omitted for Newton's method.
-  - `f′`: derivative of function `f` whose zero is sought
-- `BisectionMethod()`: [bisection method](https://en.wikipedia.org/wiki/Bisection_method)
-  - Parameters `x0` and `x1` should bracket the root
-  - if `xatol === nothing` and `maxiters isa Val` then the bisection iteration
-    loop will be unrolled
-- `BrentDekker()`: Brent-Dekker Method as described in Brent (1973). It is a
-  combination of bisection, secant, and inverse quadratic interpolation which is
-  safeguarded to ensure that the step never leaves a known bracket and that
-  sufficient progress is made at each iteration
-  - Parameters `x0` and `x1` should bracket the root
+ - `f` function of the equation to find the root
+ - `soltype` is a solution type which may be one of:
+      `CompactSolution` GPU-capable. Solution has `converged` and `root` only, see [`CompactSolutionResults`](@ref)
+      `VerboseSolution` CPU-only. Solution has additional diagnostics, see [`VerboseSolutionResults`](@ref)
+ - `tol` is a tolerance type to determine when to stop iterations.
+
+ - `method` can be one of:
+   - `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
+     - Parameters
+       - `x0`: initial guess (left side)
+       - `x1`: initial guess (right side)
+   - `RegulaFalsiMethod()`: [Regula Falsi method](https://en.wikipedia.org/wiki/False_position_method#The_regula_falsi_(false_position)_method).
+   - `NewtonsMethodAD()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method) using Automatic Differentiation
+     - Parameters
+       - `x0`: initial guess
+     - Parameters `x0`
+   - `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
+     - Parameters
+       - `x0`: initial guess
+       - `f′`: derivative of function `f` whose zero is sought
+   - `BisectionMethod()`: [bisection method](https://en.wikipedia.org/wiki/Bisection_method)
+     - Parameters `x0` and `x1` should bracket the root
+     - if `xatol === nothing` and `maxiters isa Val` then the bisection iteration
+       loop will be unrolled
+   - `BrentDekker()`: Brent-Dekker Method as described in Brent (1973). It is a
+      combination of bisection, secant, and inverse quadratic interpolation which is
+      safeguarded to ensure that the step never leaves a known bracket and that
+      sufficient progress is made at each iteration
+      - Parameters `x0` and `x1` should bracket the root
 
 The optional arguments:
-- `xatol` is the absolute tolerance of the input.
+- `tol` is a `ResidualTolerance` or `SolutionTolerance`
 - `maxiters` is the maximum number of iterations.
 
 @Book{Brent1973,
@@ -148,15 +289,65 @@ The optional arguments:
 """
 function find_zero end
 
+# Main entry point: Dispatch to specific method
 function find_zero(
     f::F,
+    method::RootSolvingMethod{FT},
+    soltype::SolutionType,
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, Int} = 10_000,
+) where {FT <: FTypes, F <: Function}
+    if tol === nothing
+        tol = SolutionTolerance{eltype(FT)}(1e-3)
+    end
+    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
+end
+
+# Allow broadcast:
+function Broadcast.broadcasted(
+    ::typeof(find_zero),
+    f::F,
+    method::RootSolvingMethod{FT},
+    soltype::SolutionType,
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Union{Nothing, Int} = 10_000,
+) where {FT <: FTypes, F}
+    if tol === nothing
+        tol = SolutionTolerance{eltype(FT)}(1e-3)
+    end
+    return broadcast(
+        find_zero,
+        f,
+        method,
+        method_args(method)...,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+####
+#### Numerical methods
+####
+
+"""
+    method_args(method::RootSolvingMethod)
+
+Return tuple of positional args for `RootSolvingMethod`.
+"""
+function method_args end
+
+method_args(method::SecantMethod) = (method.x0, method.x1)
+
+function find_zero(
+    f::F,
+    ::SecantMethod,
     x0::FT,
     x1::FT,
-    ::SecantMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT <: FTypes}
     y0 = f(x0)
     y1 = f(x1)
     x_history = init_history(soltype, x0)
@@ -169,7 +360,7 @@ function find_zero(
         push_history!(y_history, y0, soltype)
         x1 -= y1 * Δx / Δy
         y1 = f(x1)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y1)
             return SolutionResults(
                 soltype,
                 x1,
@@ -192,15 +383,17 @@ function find_zero(
     )
 end
 
+method_args(method::RegulaFalsiMethod) = (method.x0, method.x1)
+
 function find_zero(
     f::F,
+    ::RegulaFalsiMethod,
     x0::FT,
     x1::FT,
-    ::RegulaFalsiMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT}
     y0 = f(x0)
     y1 = f(x1)
     @assert y0 * y1 < 0
@@ -214,7 +407,7 @@ function find_zero(
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
         if y * y0 < 0
-            if abs(x - x1) <= xatol
+            if tol(x, x1, y)
                 return SolutionResults(
                     soltype,
                     x,
@@ -231,7 +424,7 @@ function find_zero(
             end
             lastside = +1
         else
-            if abs(x0 - x) <= xatol
+            if tol(x0, x, y)
                 return SolutionResults(
                     soltype,
                     x,
@@ -264,14 +457,16 @@ function value_deriv(f, x::FT) where {FT}
     ForwardDiff.value(tag, y), ForwardDiff.partials(tag, y, 1)
 end
 
+method_args(method::NewtonsMethodAD) = (method.x0,)
+
 function find_zero(
     f::F,
-    x0::FT,
     ::NewtonsMethodAD,
+    x0::FT,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, FT <: AbstractFloat}
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT}
     local y
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
@@ -285,7 +480,7 @@ function find_zero(
         x1 = x0 - y / y′
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y)
             return SolutionResults(
                 soltype,
                 x1,
@@ -309,15 +504,17 @@ function find_zero(
     )
 end
 
+method_args(method::NewtonsMethod) = (method.x0, method.f′)
+
 function find_zero(
     f::F,
-    f′::F′,
-    x0::FT,
     ::NewtonsMethod,
+    x0::FT,
+    f′::F′,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
-) where {F, F′, FT <: AbstractFloat}
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, F′ <: Function, FT, IT <: Int}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution
@@ -330,7 +527,7 @@ function find_zero(
         x1 = x0 - y / y′
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)
-        if abs(x0 - x1) <= xatol
+        if tol(x0, x1, y)
             return SolutionResults(
                 soltype,
                 x1,
@@ -354,15 +551,18 @@ function find_zero(
     )
 end
 
+method_args(method::BisectionMethod) = (method.x0, method.x1)
+
 function find_zero(
     f::F,
+    ::BisectionMethod,
     x0::FT,
     x1::FT,
-    ::BisectionMethod,
     soltype::SolutionType,
-    xatol::FT = FT(1 // 1000),
-    maxiters = ceil(Int, log2(abs(x1 - x0) / xatol)),
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
 ) where {F, FT <: AbstractFloat}
+    _maxiters = ceil(Int, log2(abs(x1 - x0) / tol.tol))
     y0, y1 = f(x0), f(x1)
 
     x_history = init_history(soltype, FT)
@@ -377,7 +577,7 @@ function find_zero(
         return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
     end
 
-    for i in 1:maxiters
+    for i in 1:_maxiters
         x2 = (x0 + x1) / 2
         y2 = f(x2)
         if y2 * y0 < 0
@@ -402,9 +602,9 @@ end
 
 function find_zero(
     f::F,
+    ::BisectionMethod,
     x0::FT,
     x1::FT,
-    ::BisectionMethod,
     soltype::SolutionType,
     ::Nothing,
     ::Val{maxiters},
@@ -446,23 +646,24 @@ function find_zero(
     )
 end
 
+method_args(method::BrentDekker) = (method.a, method.b)
 # Based on the zero algorithm of  Richard P.  Brent, Algorithms for Minimization
 # without Derivatives, Prentice-Hall, Englewood Cliffs, New Jersey, 1973, 195
 # pp. (available online at
 # https://maths-people.anu.edu.au/~brent/pub/pub011.html)
 function find_zero(
     f::F,
+    ::BrentDekker,
     a::FT,
     b::FT,
-    ::BrentDekker,
     soltype::SolutionType,
-    xatol::FT = FT(1e-3),
-    maxiters = 10_000,
+    _tol::AbstractTolerance{FT},
+    maxiters::Int,
 ) where {F, FT <: AbstractFloat}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
 
-    # Evaluate the function 
+    # Evaluate the function
     fa, fb = f(a), f(b)
 
     push_history!(y_history, fa, soltype)
@@ -498,7 +699,7 @@ function find_zero(
 
         # tol is used to make sure that we are properly scaled with respect to
         # the input
-        tol = 2macheps * abs(b) + xatol
+        tol = 2macheps * abs(b) + _tol.tol
 
         # bisection step size
         m = (c - b) / 2
