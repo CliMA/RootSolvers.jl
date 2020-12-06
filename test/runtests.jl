@@ -1,3 +1,11 @@
+if get(ARGS, 1, "Array") == "CuArray"
+    using CUDA
+    ArrayType = CUDA.CuArray
+    CUDA.allowscalar(false)
+else
+    ArrayType = Array
+end
+
 using Test
 using RootSolvers
 using StaticArrays
@@ -59,3 +67,5 @@ end
         end
     end
 end
+
+include("runtests_kernel.jl")
