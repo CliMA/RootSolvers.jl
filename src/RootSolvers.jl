@@ -24,7 +24,8 @@ module RootSolvers
 using DocStringExtensions: FIELDS
 
 export find_zero,
-    SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
+    SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod,
+    NewtonsMethodADBisection
 export CompactSolution, VerboseSolution
 export AbstractTolerance, ResidualTolerance, SolutionTolerance
 
@@ -69,6 +70,17 @@ end
 $(FIELDS)
 """
 struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
+    "initial guess"
+    x0::FT
+end
+
+"""
+    NewtonsMethodADBisection
+
+# Fields
+$(FIELDS)
+"""
+struct NewtonsMethodADBisection{FT} <: RootSolvingMethod{FT}
     "initial guess"
     x0::FT
 end
@@ -219,6 +231,7 @@ that `f(x) ≈ 0`, and a Boolean value `converged` indicating convergence.
     - `SecantMethod()`: [Secant method](https://en.wikipedia.org/wiki/Secant_method)
     - `RegulaFalsiMethod()`: [Regula Falsi method](https://en.wikipedia.org/wiki/False_position_method#The_regula_falsi_(false_position)_method)
     - `NewtonsMethodAD()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method) using Automatic Differentiation
+    - `NewtonsMethodADBisection()`: [Newton-bisection hybrid method] using Automatic Differentiation
     - `NewtonsMethod()`: [Newton's method](https://en.wikipedia.org/wiki/Newton%27s_method)
 - `soltype` is a solution type which may be one of:
       `CompactSolution` GPU-capable. Solution has `converged` and `root` only, see [`CompactSolutionResults`](@ref)
@@ -417,6 +430,54 @@ function find_zero(
     for i in 1:maxiters
         y, y′ = value_deriv(f, x0)
         x1 = x0 - y / y′
+        push_history!(x_history, x1, soltype)
+        push_history!(y_history, y, soltype)
+        if tol(x0, x1, y)
+            return SolutionResults(
+                soltype,
+                x1,
+                true,
+                y,
+                i,
+                x_history,
+                y_history,
+            )
+        end
+        x0 = x1
+    end
+    return SolutionResults(
+        soltype,
+        x0,
+        false,
+        y,
+        maxiters,
+        x_history,
+        y_history,
+    )
+end
+
+method_args(method::NewtonsMethodADBisection) = (method.x0, method.x1)
+
+function find_zero(
+    f::F,
+    ::NewtonsMethodADBisection,
+    x0::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance{FT},
+    maxiters::Int,
+) where {F <: Function, FT}
+    local y
+    x_history = init_history(soltype, FT)
+    y_history = init_history(soltype, FT)
+    if soltype isa VerboseSolution
+        y, y′ = value_deriv(f, x0)
+        push_history!(x_history, x0, soltype)
+        push_history!(y_history, y, soltype)
+    end
+    for i in 1:maxiters
+        y, y′ = value_deriv(f, x0)
+        x1′ = x0 - y / y′
+        x1 = FT(0.5)*(x0+x1′)
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)
         if tol(x0, x1, y)
