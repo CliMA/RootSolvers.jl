@@ -1,5 +1,6 @@
 if get(ARGS, 1, "Array") == "CuArray"
     using CUDA
+    using CUDAKernels
     ArrayType = CUDA.CuArray
     CUDA.allowscalar(false)
     get_device() = CUDADevice()

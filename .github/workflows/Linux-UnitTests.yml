@@ -1,0 +1,65 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/Linux-UnitTests.yml'
+      - 'src/**'
+      - 'test/**'
+      - 'Project.toml'
+      - 'Manifest.toml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        julia-version: ['1.6', '1.7']
+
+    steps:
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.4.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Checkout
+      uses: actions/checkout@v2.2.0
+
+    - name: Set up Julia
+      uses: julia-actions/setup-julia@latest
+      with:
+        version: ${{ matrix.julia-version }}
+
+    - name: Cache artifacts
+      uses: actions/cache@v1
+      env:
+        cache-name: cache-artifacts
+      with:
+        path: ~/.julia/artifacts
+        key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-test-${{ env.cache-name }}-
+          ${{ runner.os }}-test-
+          ${{ runner.os }}-
+    - name: Install Project Packages
+      run: |
+        julia --color=yes --project -e 'using Pkg; Pkg.instantiate()'
+        julia --color=yes --project -e 'using Pkg; Pkg.precompile(;strict=true)'
+        julia --color=yes --project -e 'using Pkg; Pkg.status()'
+    - name: Project Manifest
+      run: |
+        julia --color=no --project -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
+    - name: Install Project Test Packages
+      run: |
+        julia --color=yes --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
+        julia --color=yes --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'
+        julia --color=yes --project=test -e 'using Pkg; Pkg.status()'
+    - name: Project Test Manifest
+      run: |
+        julia --color=no --project=test -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
+    - name: Run Unit Tests
+      env:
+        TEST_MODULES: ${{ matrix.test-modules }}
+      run: |
+        julia --color=yes --check-bounds=yes --project=test test/runtests.jl
