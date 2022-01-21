@@ -1,7 +1,7 @@
 name = "RootSolvers"
 uuid = "7181ea78-2dcb-4de3-ab41-2b8ab5a31e74"
 authors = ["CliMA Contributors <clima-software@caltech.edu>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
