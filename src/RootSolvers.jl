@@ -208,7 +208,7 @@ Evaluates solution tolerance, based on ``|x2-x1|``
             method::RootSolvingMethod{FT},
             soltype::SolutionType,
             tol::Union{Nothing, AbstractTolerance} = nothing,
-            maxiters::Union{Nothing, Int} = 10_000,
+            maxiters::Int = 10_000,
             )
 
 Finds the nearest root of `f`. Returns a the value of the root `x` such
@@ -234,7 +234,7 @@ function find_zero(
     method::RootSolvingMethod{FT},
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, Int} = 10_000,
+    maxiters::Int = 10_000,
 ) where {FT <: FTypes, F <: Function}
     if tol === nothing
         tol = SolutionTolerance{eltype(FT)}(1e-3)
@@ -249,7 +249,7 @@ function Broadcast.broadcasted(
     method::RootSolvingMethod{FT},
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Union{Nothing, Int} = 10_000,
+    maxiters::Int = 10_000,
 ) where {FT <: FTypes, F}
     if tol === nothing
         tol = SolutionTolerance{eltype(FT)}(1e-3)
@@ -453,7 +453,7 @@ function find_zero(
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F <: Function, F′ <: Function, FT, IT <: Int}
+) where {F <: Function, F′ <: Function, FT}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution
