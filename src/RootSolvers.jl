@@ -31,7 +31,7 @@ export AbstractTolerance, ResidualTolerance, SolutionTolerance
 import ForwardDiff
 
 # Input types
-const FTypes = Union{AbstractFloat, AbstractArray}
+const FTypes = Union{Real, AbstractArray}
 
 abstract type RootSolvingMethod{FT <: FTypes} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
@@ -96,7 +96,7 @@ Used to return a [`VerboseSolutionResults`](@ref)
 """
 struct VerboseSolution <: SolutionType end
 
-abstract type AbstractSolutionResults{AbstractFloat} end
+abstract type AbstractSolutionResults{Real} end
 
 """
     VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
@@ -143,24 +143,24 @@ end
 SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
 
-init_history(::VerboseSolution, x::FT) where {FT <: AbstractFloat} = FT[x]
+init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
-init_history(::VerboseSolution, ::Type{FT}) where {FT <: AbstractFloat} = FT[]
-init_history(::CompactSolution, ::Type{FT}) where {FT <: AbstractFloat} =
+init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
+init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} =
     nothing
 
 function push_history!(
     history::Vector{FT},
     x::FT,
     ::VerboseSolution,
-) where {FT <: AbstractFloat}
+) where {FT <: Real}
     push!(history, x)
 end
 function push_history!(
     history::Nothing,
     x::FT,
     ::CompactSolution,
-) where {FT <: AbstractFloat}
+) where {FT <: Real}
     nothing
 end
 
