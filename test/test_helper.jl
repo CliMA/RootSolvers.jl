@@ -116,8 +116,8 @@ for FT in float_types()
     x -> 2*x - 3,
     FT(3),
     FT(1),
-    FT(-4),
-    FT(-1),
+    FT(1),
+    FT(4),
     ))
 end
 
