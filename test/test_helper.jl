@@ -112,12 +112,12 @@ problem_list = RootSolvingProblem[]
 for FT in float_types()
   push!(problem_list, RootSolvingProblem(
     "simple quadratic",
-    x -> x^2 - 100^2,
-    x -> 2x,
-    FT(100),
+    x -> x^2 - 3*x,
+    x -> 2*x - 3,
+    FT(3),
     FT(1),
-    FT(0),
-    FT(1000),
+    FT(-4),
+    FT(-1),
     ))
 end
 
