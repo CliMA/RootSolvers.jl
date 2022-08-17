@@ -26,7 +26,7 @@ using DocStringExtensions: FIELDS
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
-export AbstractTolerance, ResidualTolerance, SolutionTolerance
+export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance
 
 import ForwardDiff
 
@@ -198,6 +198,22 @@ end
 Evaluates solution tolerance, based on ``|x2-x1|``
 """
 (tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
+
+"""
+    RelativeSolutionTolerance
+
+A tolerance type based on consecutive iterations of solution ``x`` of the equation ``f(x) = 0``
+"""
+struct RelativeSolutionTolerance{FT} <: AbstractTolerance{FT}
+    tol::FT
+end
+
+"""
+    (tol::RelativeSolutionTolerance)(x1, x2, y)
+
+Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
+"""
+(tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1)/x1) < tol.tol
 
 # TODO: CuArrays.jl has trouble with isapprox on 1.1
 # we use simple checks for now, will switch to relative checks later.
