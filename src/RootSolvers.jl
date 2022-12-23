@@ -27,7 +27,7 @@ export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
 export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance,
-    RelativeAbsoluteSolutionTolerance
+    RelativeOrAbsoluteSolutionTolerance
 
 import ForwardDiff
 
@@ -217,24 +217,24 @@ Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
 (tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1)/x1) < tol.tol
 
 """
-    RelativeAbsoluteSolutionTolerance(rtol, atol)
+    RelativeOrAbsoluteSolutionTolerance(rtol, atol)
 
 A combined tolerance type based on relative and absolute tolerances.
 
 See [`RelativeSolutionTolerance`](@ref) and [`SolutionTolerance`](@ref)
 """
-struct RelativeAbsoluteSolutionTolerance{FT} <: AbstractTolerance{FT}
+struct RelativeOrAbsoluteSolutionTolerance{FT} <: AbstractTolerance{FT}
     rtol::FT
     atol::FT
 end
 
 """
-    (tol::RelativeAbsoluteSolutionTolerance)(x1, x2, y)
+    (tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y)
 
 Evaluates combined relative and absolute tolerance, based
 on ``|(x2-x1)/x1| || |x2-x1|``
 """
-(tol::RelativeAbsoluteSolutionTolerance)(x1, x2, y) =
+(tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
     abs((x2 - x1)/x1) < tol.rtol || abs(x2 - x1) < tol.atol
 
 # TODO: CuArrays.jl has trouble with isapprox on 1.1

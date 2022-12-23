@@ -35,6 +35,7 @@ CompactSolutionResults
 ResidualTolerance
 SolutionTolerance
 RelativeSolutionTolerance
+RelativeOrAbsoluteSolutionTolerance
 ```
 
 ## Internal helper methods
