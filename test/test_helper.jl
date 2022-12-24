@@ -35,7 +35,7 @@ get_tolerances(FT) = [
   ResidualTolerance{FT}(1e-6),
   SolutionTolerance{FT}(1e-3),
   RelativeSolutionTolerance{FT}(sqrt(eps(FT))),
-  RelativeOrAbsoluteSolutionTolerance{FT}(sqrt(eps(FT)), 1e-4),
+  RelativeOrAbsoluteSolutionTolerance{FT}(100*eps(FT), 1e-6),
   nothing,
 ]
 
