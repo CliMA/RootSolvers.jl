@@ -1,13 +1,13 @@
 env:
-  JULIA_VERSION: "1.8.0"
-  CUDA_VERSION: "10.2"
+  JULIA_VERSION: "1.8.3"
+  CUDA_VERSION: "11.2"
 
 steps:
   - label: "init cpu env"
     key: "init_cpu_env"
     command:
       - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(strict=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
       - "julia --project -e 'using Pkg; Pkg.status()'"
     agents:
       config: cpu
@@ -20,10 +20,10 @@ steps:
   - label: "init gpu env"
     key: "init_gpu_env"
     command:
-      - "julia --project -e 'using Pkg; Pkg.instantiate(verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(strict=true)'"
-      - "julia --project=test -e 'using Pkg; Pkg.instantiate(verbose=true)'"
-      - "julia --project=test -e 'using Pkg; Pkg.precompile(strict=true)'"
+      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
       - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
       - "julia --project=test -e 'using CUDA; CUDA.precompile_runtime()'"
     agents:

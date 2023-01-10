@@ -43,6 +43,7 @@ end
     device = get_device()
     work_groups = (1,)
     ndrange = (n_elem,)
+    n_failures = 0
 
     for prob in problem_list
         FT = typeof(prob.x̃)
@@ -72,8 +73,18 @@ end
                 )
                 wait(device, event)
 
-                @test all(d_dst .≈ prob.x̃)
+                # if !all(d_dst .≈ prob.x̃)
+                #     println("--Problem: $(prob.name), Meth:$MethodType, tol:$tol, FT:$FT")
+                #     @show abs.(d_dst .- prob.x̃)
+                #     @show d_dst
+                #     @show prob.x̃
+                #     n_failures += 1
+                # else
+                #     @test all(d_dst .≈ prob.x̃)
+                # end
+                @test all(Array(d_dst) .≈ prob.x̃)
             end
         end
     end
+    @test n_failures == 0
 end
