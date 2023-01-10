@@ -73,15 +73,16 @@ end
                 )
                 wait(device, event)
 
-                if !all(d_dst .≈ prob.x̃)
-                    println("--Problem: $(prob.name), Meth:$MethodType, tol:$tol, FT:$FT")
-                    @show abs.(d_dst .- prob.x̃)
-                    @show d_dst
-                    @show prob.x̃
-                    n_failures += 1
-                else
-                    @test all(d_dst .≈ prob.x̃)
-                end
+                # if !all(d_dst .≈ prob.x̃)
+                #     println("--Problem: $(prob.name), Meth:$MethodType, tol:$tol, FT:$FT")
+                #     @show abs.(d_dst .- prob.x̃)
+                #     @show d_dst
+                #     @show prob.x̃
+                #     n_failures += 1
+                # else
+                #     @test all(d_dst .≈ prob.x̃)
+                # end
+                @test all(Array(d_dst) .≈ prob.x̃)
             end
         end
     end
