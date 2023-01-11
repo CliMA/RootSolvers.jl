@@ -31,7 +31,13 @@ end
 problem_size() = 5
 problem_size(::RootSolvingProblem{S,F,F′,FT,FTA,N}) where {S,F,F′,FT,FTA,N} = N
 float_types() = [Float32, Float64]
-get_tolerances(FT) = [ResidualTolerance{FT}(1e-6), SolutionTolerance{FT}(1e-3), RelativeSolutionTolerance{FT}(sqrt(eps(FT))), nothing]
+get_tolerances(FT) = [
+  ResidualTolerance{FT}(1e-6),
+  SolutionTolerance{FT}(1e-3),
+  RelativeSolutionTolerance{FT}(sqrt(eps(FT))),
+  RelativeOrAbsoluteSolutionTolerance{FT}(100*eps(FT), 1e-6),
+  nothing,
+]
 
 test_verbose!(::CompactSolution, sol, problem, tol, converged) = nothing
 function test_verbose!(::VerboseSolution, sol, problem, tol, converged)
