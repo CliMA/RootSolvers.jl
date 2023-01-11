@@ -72,7 +72,7 @@ end
                 )
                 wait(device, event)
 
-                @test all(d_dst .≈ prob.x̃)
+                @test all(Array(d_dst) .≈ prob.x̃)
             end
         end
     end
