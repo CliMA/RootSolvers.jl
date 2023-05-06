@@ -3,8 +3,10 @@ name: OS Unit Tests
 on:
   push:
     branches:
-      - staging
-      - trying
+      - main
+    tags: '*'
+  pull_request:
+  merge_group:
 
 jobs:
   test-os:
