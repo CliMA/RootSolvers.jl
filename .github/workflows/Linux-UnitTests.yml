@@ -1,13 +1,13 @@
 name: Unit Tests
 
 on:
+  push:
+    branches:
+      - main
+    tags: '*'
   pull_request:
-    paths:
-      - '.github/workflows/Linux-UnitTests.yml'
-      - 'src/**'
-      - 'test/**'
-      - 'Project.toml'
-      - 'Manifest.toml'
+  merge_group:
+
 jobs:
   test:
     runs-on: ubuntu-latest
