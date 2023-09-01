@@ -22,7 +22,7 @@ filter!(x->x.x_init isa AbstractArray, problem_list)
 
 @kernel function solve_kernel!(
     f,
-    f′,
+    ff′,
     MethodType,
     x_init, x_lower, x_upper,
     tol,
@@ -32,8 +32,9 @@ filter!(x->x.x_init isa AbstractArray, problem_list)
     @inbounds begin
         # Construct the method and solve the system.
         # Store the solution in `dst`
-        method = get_method(MethodType, x_init[i], x_lower[i], x_upper[i], f′)
-        sol = find_zero(f, method, CompactSolution(), tol)
+        method = get_method(MethodType, x_init[i], x_lower[i], x_upper[i])
+        _f = MethodType isa NewtonsMethodType ? ff′ : f
+        sol = find_zero(_f, method, CompactSolution(), tol)
         dst[i] = sol.root
     end
 end
@@ -61,7 +62,7 @@ end
                 kernel! = solve_kernel!(device, work_groups)
                 event = kernel!(
                     prob.f,
-                    prob.f′,
+                    prob.ff′,
                     MethodType,
                     x_init,
                     x_lower,
