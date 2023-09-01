@@ -2,13 +2,13 @@ using Test
 using RootSolvers
 using StaticArrays
 
-struct RootSolvingProblem{S,F,F′,FT,FTA,N}
+struct RootSolvingProblem{S,F,FF′,FT,FTA,N}
   "Name"
   name::S
   "Root equation"
   f::F
-  "Derivative of f"
-  f′::F′
+  "Root and derivative of f"
+  ff′::FF′
   "Exact solution"
   x̃::FT
   "Initial guess, for iterative methods"
@@ -21,15 +21,15 @@ end
 function RootSolvingProblem(args...)
   S = typeof(args[1])
   F = typeof(args[2])
-  F′ = typeof(args[3])
+  FF′ = typeof(args[3])
   FT = eltype(args[end])
   FTA = typeof(args[end])
   N = length(args[end])
-  RootSolvingProblem{S,F,F′,FT,FTA,N}(args...)
+  RootSolvingProblem{S,F,FF′,FT,FTA,N}(args...)
 end
 
 problem_size() = 5
-problem_size(::RootSolvingProblem{S,F,F′,FT,FTA,N}) where {S,F,F′,FT,FTA,N} = N
+problem_size(::RootSolvingProblem{S,F,FF′,FT,FTA,N}) where {S,F,FF′,FT,FTA,N} = N
 float_types() = [Float32, Float64]
 get_tolerances(FT) = [
   ResidualTolerance{FT}(1e-6),
@@ -67,7 +67,7 @@ function expand_data_inputs!(problem_list, ε, N)
       RootSolvingProblem(
         problem.name,
         problem.f,
-        problem.f′,
+        problem.ff′,
         problem.x̃,
         SArray{Tuple{N, N}, FT}(problem.x_init  .+ FT(ε)*rand(FT, N, N)),
         SArray{Tuple{N, N}, FT}(problem.x_lower .+ FT(ε)*rand(FT, N, N)),
@@ -81,16 +81,16 @@ end
 #####
 
 """
-    get_methods(x_init, x_lower, x_upper, f′)
+    get_methods(x_init, x_lower, x_upper)
 
 Numerical methods to test, given arguments from `RootSolvingProblem`.
 """
-function get_methods(x_init, x_lower, x_upper, f′)
+function get_methods(x_init, x_lower, x_upper)
     return (
     SecantMethod(x_lower, x_upper),
     RegulaFalsiMethod(x_lower, x_upper),
     NewtonsMethodAD(x_init),
-    NewtonsMethod(x_init, f′)
+    NewtonsMethod(x_init)
     )
 end
 
@@ -104,10 +104,10 @@ struct NewtonsMethodType end
 
 # Convenience methods for unifying interfaces
 # in test suite:
-get_method(::SecantMethodType, x_init, x_lower, x_upper, f′) = SecantMethod(x_lower, x_upper)
-get_method(::RegulaFalsiMethodType, x_init, x_lower, x_upper, f′) = RegulaFalsiMethod(x_lower, x_upper)
-get_method(::NewtonsMethodADType, x_init, x_lower, x_upper, f′) = NewtonsMethodAD(x_init)
-get_method(::NewtonsMethodType, x_init, x_lower, x_upper, f′) = NewtonsMethod(x_init, f′)
+get_method(::SecantMethodType, x_init, x_lower, x_upper) = SecantMethod(x_lower, x_upper)
+get_method(::RegulaFalsiMethodType, x_init, x_lower, x_upper) = RegulaFalsiMethod(x_lower, x_upper)
+get_method(::NewtonsMethodADType, x_init, x_lower, x_upper) = NewtonsMethodAD(x_init)
+get_method(::NewtonsMethodType, x_init, x_lower, x_upper) = NewtonsMethod(x_init)
 
 #####
 ##### Construct problem list
@@ -119,7 +119,7 @@ for FT in float_types()
   push!(problem_list, RootSolvingProblem(
     "simple quadratic",
     x -> x^2 - 100^2,
-    x -> 2x,
+    x -> (x^2 - 100^2, 2x),
     FT(100),
     FT(1),
     FT(0),

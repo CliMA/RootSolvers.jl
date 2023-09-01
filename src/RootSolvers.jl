@@ -80,11 +80,9 @@ end
 # Fields
 $(FIELDS)
 """
-struct NewtonsMethod{FT, F′ <: Function} <: RootSolvingMethod{FT}
+struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
     "initial guess"
     x0::FT
-    "`f′` derivative of function `f` whose zero is sought"
-    f′::F′
 end
 
 abstract type SolutionType end
@@ -481,26 +479,25 @@ function find_zero(
     )
 end
 
-method_args(method::NewtonsMethod) = (method.x0, method.f′)
+method_args(method::NewtonsMethod) = (method.x0,)
 
 function find_zero(
     f::F,
     ::NewtonsMethod,
     x0::FT,
-    f′::F′,
     soltype::SolutionType,
     tol::AbstractTolerance{FT},
     maxiters::Int,
-) where {F <: Function, F′ <: Function, FT}
+) where {F <: Function, FT}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution
-        y, y′ = f(x0), f′(x0)
+        y, y′ = f(x0)
         push_history!(x_history, x0, soltype)
         push_history!(y_history, y, soltype)
     end
     for i in 1:maxiters
-        y, y′ = f(x0), f′(x0)
+        y, y′ = f(x0)
         x1 = x0 - y / y′
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y, soltype)

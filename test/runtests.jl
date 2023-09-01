@@ -17,9 +17,10 @@ include("test_helper.jl")
         FT = typeof(problem.x̃)
         for sol_type in [CompactSolution(), VerboseSolution()]
             for tol in get_tolerances(FT)
-                for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper, problem.f′)
+                for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper)
+                    f = method isa NewtonsMethod ? problem.ff′ : problem.f
                     if problem.x_init isa AbstractArray
-                        sol = RootSolvers.find_zero.(Ref(problem.f), method, sol_type, tol)
+                        sol = RootSolvers.find_zero.(Ref(f), method, sol_type, tol)
                         converged = map(x -> x.converged, sol)
                         X_roots = map(x -> x.root, sol)
                         @test isbits(method)
@@ -28,7 +29,7 @@ include("test_helper.jl")
                         @test all(X_roots .≈ problem.x̃)
                         test_verbose!(sol_type, sol, problem, tol, all(converged))
                     else
-                        sol = find_zero(problem.f, method, sol_type, tol)
+                        sol = find_zero(f, method, sol_type, tol)
                         @test isbits(method)
                         @test sol.converged
                         @test sol.root isa FT
@@ -46,9 +47,10 @@ end
         FT = typeof(problem.x̃)
         for sol_type in [CompactSolution(), VerboseSolution()]
             for tol in get_tolerances(FT)
-                for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper, problem.f′)
+                for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper)
+                    f = method isa NewtonsMethod ? problem.ff′ : problem.f
                     if problem.x_init isa AbstractArray
-                        sol = RootSolvers.find_zero.(Ref(problem.f), method, sol_type, tol, 1)
+                        sol = RootSolvers.find_zero.(Ref(f), method, sol_type, tol, 1)
                         converged = map(x -> x.converged, sol)
                         X_roots = map(x -> x.root, sol)
                         @test isbits(method)
@@ -56,7 +58,7 @@ end
                         @test eltype(X_roots) == eltype(problem.x_init)
                         test_verbose!(sol_type, sol, problem, tol, any(converged))
                     else
-                        sol = find_zero(problem.f, method, sol_type, tol, 1)
+                        sol = find_zero(f, method, sol_type, tol, 1)
                         @test isbits(method)
                         @test !sol.converged
                         @test sol.root isa FT
