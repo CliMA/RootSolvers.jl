@@ -19,10 +19,9 @@ format = Documenter.HTML(
     collapselevel = 1,
 )
 
-makedocs(
+makedocs(;
     sitename = "RootSolvers.jl",
     format = format,
-    strict = true,
     clean = true,
     modules = [RootSolvers],
     pages = pages,
