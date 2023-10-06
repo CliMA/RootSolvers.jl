@@ -268,7 +268,7 @@ function find_zero end
 function find_zero(
     f::F,
     method::RootSolvingMethod{FT},
-    soltype::SolutionType,
+    soltype::SolutionType = CompactSolution(),
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 10_000,
 ) where {FT <: FTypes, F <: Function}
