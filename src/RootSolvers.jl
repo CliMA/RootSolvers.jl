@@ -16,6 +16,9 @@ julia> sol = find_zero(x -> x^2 - 100^2,
 
 julia> sol
 RootSolvers.CompactSolutionResults{Float64}(99.99999999994358, true)
+
+julia> sol.root
+99.99999999994358
 ```
 
 """
@@ -132,6 +135,12 @@ struct CompactSolution <: SolutionType end
 
 Result returned from `find_zero` when
 `CompactSolution` is passed as the `soltype`.
+
+To extract the root, use
+```julia
+sol = RootSolvers.find_zero(...)
+sol.root
+```
 """
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
