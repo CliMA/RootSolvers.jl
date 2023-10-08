@@ -1,44 +1,24 @@
+agents:
+  queue: central
+  slurm_mem: 8G
+  modules: julia/1.9.3 cuda/12.2
+
 env:
   JULIA_VERSION: "1.9.3"
+  OPENBLAS_NUM_THREADS: 1
   CUDA_VERSION: "12.2"
+  OMPI_MCA_opal_warn_on_missing_libcuda: 0
+  JULIA_CPU_TARGET: 'broadwell;skylake'
 
 steps:
-  - label: "init cpu env"
-    key: "init_cpu_env"
+  - label: "init environment :computer:"
+    key: "init_env"
     command:
-      - echo "--- Instantiate project cpu"
-      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
-      - "julia --project -e 'using Pkg; Pkg.status()'"
+      - echo "--- Instantiate test env"
+      - julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate(;verbose=true); Pkg.precompile(;strict=true); Pkg.status()'
     agents:
-      config: cpu
-      queue: central
-      slurm_ntasks: 1
-      slurm_cpus_per_task: 8
-    env:
-      JULIA_NUM_PRECOMPILE_TASKS: 8
-
-  - wait
-
-  - label: "init gpu env"
-    key: "init_gpu_env"
-    command:
-      - echo "--- Instantiate project gpu"
-      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project -e 'using Pkg; Pkg.precompile(;strict=true)'"
-      - echo "--- Instantiate test gpu"
-      - "julia --project=test -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
-      - "julia --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'"
-      - "julia --project=test -e 'using CUDA; CUDA.versioninfo()'"
-      - "julia --project=test -e 'using CUDA; CUDA.precompile_runtime()'"
-    agents:
-      config: gpu
-      queue: central
       slurm_ntasks: 1
       slurm_gpus: 1
-      slurm_cpus_per_task: 8
-    env:
-      JULIA_NUM_PRECOMPILE_TASKS: 8
 
   - wait
 
@@ -47,14 +27,11 @@ steps:
       - "julia --project -e 'using Pkg; Pkg.test()'"
     agents:
       config: cpu
-      queue: central
       slurm_ntasks: 1
 
   - label: "GPU tests"
     command:
       - "julia --project -e 'using Pkg; Pkg.test(;test_args=[\"CuArray\"])'"
     agents:
-      config: gpu
-      queue: central
       slurm_ntasks: 1
       slurm_gpus: 1
