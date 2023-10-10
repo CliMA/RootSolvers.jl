@@ -24,14 +24,14 @@ steps:
 
   - label: "CPU tests"
     command:
-      - "julia --project -e 'using Pkg; Pkg.test()'"
+      - "julia --project=test test/runtests.jl"
     agents:
       config: cpu
       slurm_ntasks: 1
 
   - label: "GPU tests"
     command:
-      - "julia --project -e 'using Pkg; Pkg.test(;test_args=[\"CuArray\"])'"
+      - "julia --project=test test/runtests.jl CuArray"
     agents:
       slurm_ntasks: 1
       slurm_gpus: 1
