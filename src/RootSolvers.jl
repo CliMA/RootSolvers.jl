@@ -16,12 +16,13 @@ julia> sol = find_zero(x -> x^2 - 100^2,
 
 julia> sol
 RootSolvers.CompactSolutionResults{Float64}(99.99999999994358, true)
+
+julia> sol.root
+99.99999999994358
 ```
 
 """
 module RootSolvers
-
-using DocStringExtensions: FIELDS
 
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
@@ -41,12 +42,11 @@ Base.broadcastable(method::RootSolvingMethod) = Ref(method)
     SecantMethod
 
 # Fields
-$(FIELDS)
+ - `x0` lower bound
+ - `x1` upper bound
 """
 struct SecantMethod{FT} <: RootSolvingMethod{FT}
-    "lower"
     x0::FT
-    "upper bound"
     x1::FT
 end
 
@@ -54,12 +54,11 @@ end
     RegulaFalsiMethod
 
 # Fields
-$(FIELDS)
+ - `x0` lower bound
+ - `x1` upper bound
 """
 struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
-    "lower bound"
     x0::FT
-    "upper bound"
     x1::FT
 end
 
@@ -67,10 +66,9 @@ end
     NewtonsMethodAD
 
 # Fields
-$(FIELDS)
+ - `x0` initial guess
 """
 struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
-    "initial guess"
     x0::FT
 end
 
@@ -78,10 +76,9 @@ end
     NewtonsMethod
 
 # Fields
-$(FIELDS)
+ - `x0` initial guess
 """
 struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
-    "initial guess"
     x0::FT
 end
 
@@ -132,6 +129,12 @@ struct CompactSolution <: SolutionType end
 
 Result returned from `find_zero` when
 `CompactSolution` is passed as the `soltype`.
+
+To extract the root, use
+```julia
+sol = RootSolvers.find_zero(...)
+sol.root
+```
 """
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
@@ -268,7 +271,7 @@ function find_zero end
 function find_zero(
     f::F,
     method::RootSolvingMethod{FT},
-    soltype::SolutionType,
+    soltype::SolutionType = CompactSolution(),
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 10_000,
 ) where {FT <: FTypes, F <: Function}
