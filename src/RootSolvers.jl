@@ -24,8 +24,6 @@ julia> sol.root
 """
 module RootSolvers
 
-using DocStringExtensions: FIELDS
-
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
@@ -44,12 +42,11 @@ Base.broadcastable(method::RootSolvingMethod) = Ref(method)
     SecantMethod
 
 # Fields
-$(FIELDS)
+ - `x0` lower bound
+ - `x1` upper bound
 """
 struct SecantMethod{FT} <: RootSolvingMethod{FT}
-    "lower"
     x0::FT
-    "upper bound"
     x1::FT
 end
 
@@ -57,12 +54,11 @@ end
     RegulaFalsiMethod
 
 # Fields
-$(FIELDS)
+ - `x0` lower bound
+ - `x1` upper bound
 """
 struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
-    "lower bound"
     x0::FT
-    "upper bound"
     x1::FT
 end
 
@@ -70,10 +66,9 @@ end
     NewtonsMethodAD
 
 # Fields
-$(FIELDS)
+ - `x0` initial guess
 """
 struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
-    "initial guess"
     x0::FT
 end
 
@@ -81,10 +76,9 @@ end
     NewtonsMethod
 
 # Fields
-$(FIELDS)
+ - `x0` initial guess
 """
 struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
-    "initial guess"
     x0::FT
 end
 
