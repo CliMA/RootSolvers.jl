@@ -26,16 +26,15 @@ module RootSolvers
 
 export find_zero,
     SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
-export CompactSolution, VerboseSolution
-export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance,
+export CompactSolution, CompactCachedSolution, VerboseSolution
+export AbstractConvergenceCriteria, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance,
     RelativeOrAbsoluteSolutionTolerance
 
 import ForwardDiff
 
-# Input types
-const FTypes = Union{Real, AbstractArray}
+const maxiters_default = 10_000
 
-abstract type RootSolvingMethod{FT <: FTypes} end
+abstract type RootSolvingMethod{XT} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
 """
@@ -45,9 +44,9 @@ Base.broadcastable(method::RootSolvingMethod) = Ref(method)
  - `x0` lower bound
  - `x1` upper bound
 """
-struct SecantMethod{FT} <: RootSolvingMethod{FT}
-    x0::FT
-    x1::FT
+struct SecantMethod{XT} <: RootSolvingMethod{XT}
+    x0::XT
+    x1::XT
 end
 
 """
@@ -57,9 +56,9 @@ end
  - `x0` lower bound
  - `x1` upper bound
 """
-struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
-    x0::FT
-    x1::FT
+struct RegulaFalsiMethod{XT} <: RootSolvingMethod{XT}
+    x0::XT
+    x1::XT
 end
 
 """
@@ -68,8 +67,8 @@ end
 # Fields
  - `x0` initial guess
 """
-struct NewtonsMethodAD{FT} <: RootSolvingMethod{FT}
-    x0::FT
+struct NewtonsMethodAD{XT} <: RootSolvingMethod{XT}
+    x0::XT
 end
 
 """
@@ -78,8 +77,8 @@ end
 # Fields
  - `x0` initial guess
 """
-struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
-    x0::FT
+struct NewtonsMethod{XT} <: RootSolvingMethod{XT}
+    x0::XT
 end
 
 abstract type SolutionType end
@@ -92,17 +91,17 @@ Used to return a [`VerboseSolutionResults`](@ref)
 """
 struct VerboseSolution <: SolutionType end
 
-abstract type AbstractSolutionResults{Real} end
+abstract type AbstractSolutionResults{XT} end
 
 """
-    VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+    VerboseSolutionResults{XT} <: AbstractSolutionResults{XT}
 
 Result returned from `find_zero` when
 `VerboseSolution` is passed as the `soltype`.
 """
-struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+struct VerboseSolutionResults{XT, FT} <: AbstractSolutionResults{XT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
-    root::FT
+    root::XT
     "indicates convergence"
     converged::Bool
     "error of the root of the equation ``f(x^*) = 0``"
@@ -110,9 +109,9 @@ struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "number of iterations performed"
     iter_performed::Int
     "solution per iteration"
-    root_history::Vector{FT}
+    root_history::Vector{XT}
     "error of the root of the equation ``f(x^*) = 0`` per iteration"
-    err_history::Vector{FT}
+    err_history::Vector{XT}
 end
 SolutionResults(soltype::VerboseSolution, args...) =
     VerboseSolutionResults(args...)
@@ -125,7 +124,14 @@ Used to return a [`CompactSolutionResults`](@ref)
 struct CompactSolution <: SolutionType end
 
 """
-    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+    CompactCachedSolution <: SolutionType
+
+Used to return a [`CompactCachedSolutionResults`](@ref)
+"""
+struct CompactCachedSolution <: SolutionType end
+
+"""
+    CompactSolutionResults{XT} <: AbstractSolutionResults{XT, FT}
 
 Result returned from `find_zero` when
 `CompactSolution` is passed as the `soltype`.
@@ -136,86 +142,149 @@ sol = RootSolvers.find_zero(...)
 sol.root
 ```
 """
-struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+struct CompactSolutionResults{XT} <: AbstractSolutionResults{XT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
-    root::FT
+    root::XT
     "indicates convergence"
     converged::Bool
 end
 SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
 
-init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
+struct CompactCachedSolutionResults{XT, C} <: AbstractSolutionResults{XT}
+    "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
+    root::XT
+    "indicates convergence"
+    converged::Bool
+    "Cache when computing ``f(x)``"
+    cache::C
+end
+SolutionResults(soltype::CompactCachedSolution, root, converged, y, args...) =
+    CompactCachedSolutionResults(root, converged, y)
+
+init_history(::VerboseSolution, x::XT) where {XT <: Real} = XT[x]
 init_history(::CompactSolution, x) = nothing
-init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
-init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} =
-    nothing
+init_history(::CompactCachedSolution, x) = nothing
+init_history(::VerboseSolution, ::Type{XT}) where {XT} = XT[]
+init_history(::CompactSolution, ::Type{XT}) where {XT} = nothing
+init_history(::CompactCachedSolution, ::Type{XT}) where {XT} = nothing
 
 function push_history!(
-    history::Vector{FT},
-    x::FT,
+    history::Vector{XT},
+    x::XT,
     ::VerboseSolution,
-) where {FT <: Real}
+) where {XT <: Real}
     push!(history, x)
 end
 function push_history!(
     history::Nothing,
-    x::FT,
+    x::XT,
     ::CompactSolution,
-) where {FT <: Real}
+) where {XT <: Real}
+    nothing
+end
+function push_history!(
+    history::Nothing,
+    x::XT,
+    ::CompactCachedSolution,
+) where {XT <: Real}
     nothing
 end
 
-abstract type AbstractTolerance{FT <: FTypes} end
-Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
-"""
-    ResidualTolerance
+abstract type AbstractConvergenceCriteria{N} end
 
-A tolerance type based on the residual of the equation ``f(x) = 0``
-"""
-struct ResidualTolerance{FT} <: AbstractTolerance{FT}
-    tol::FT
+maxiters(::AbstractConvergenceCriteria{N}) where {N} = N
+Base.broadcastable(cc::AbstractConvergenceCriteria) = Ref(cc)
+
+abstract type AbstractRootResult end
+struct NumberResult{FX} <: AbstractRootResult
+    fx::FX
 end
+NumberResult(::NumberResult) = x
+struct CachedResult{FX, C} <: AbstractRootResult
+    fx::FX
+    cache::C
+end
+value(x) = x
+value(cr::AbstractRootResult) = cr.fx
+cache(x) = x
+cache(cr::CachedResult) = cr.cache
+NumberResult(x::CachedResult) = x
 
-"""
-    (tol::ResidualTolerance)(x1, x2, y)
+# struct FunctionAndCache{F, C} <: AbstractRootResult
+#     f::F
+#     cache::C
+# end
+# value(x) = x
+# value(cr::AbstractRootResult) = cr.fx
+# cache(cr::CachedResult) = cr.cache
+# NumberResult(x::CachedResult) = x
+# (rr::FunctionAndCache)(x) = rr.f(x).value
 
-Evaluates residual tolerance, based on ``|f(x)|``
-"""
-(tol::ResidualTolerance)(x1, x2, y) = abs(y) < tol.tol
 
 """
     SolutionTolerance
 
 A tolerance type based on the solution ``x`` of the equation ``f(x) = 0``
 """
-struct SolutionTolerance{FT} <: AbstractTolerance{FT}
-    tol::FT
+struct SolutionTolerance{N, XT} <: AbstractConvergenceCriteria{N}
+    tol::XT
 end
+SolutionTolerance(maxiters::Int, tol::XT) where {XT} =
+    SolutionTolerance{maxiters, XT}(tol)
+
+SolutionTolerance(tol::XT) where {XT} =
+    SolutionTolerance(maxiters_default, tol)
 
 """
-    (tol::SolutionTolerance)(x1, x2, y)
+    (cc::SolutionTolerance)(x1, x2, y)
 
 Evaluates solution tolerance, based on ``|x2-x1|``
 """
-(tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
+(cc::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < cc.tol
+
+"""
+    ResidualTolerance
+
+A tolerance type based on the residual of the equation ``f(x) = 0``
+"""
+struct ResidualTolerance{N, FT} <: AbstractConvergenceCriteria{N}
+    tol::FT
+end
+ResidualTolerance(maxiters::Int, tol::FT) where {FT} =
+    ResidualTolerance{maxiters, FT}(tol)
+ResidualTolerance(tol::FT) where {FT} =
+    ResidualTolerance(maxiters_default, tol)
+
+"""
+    (cc::ResidualTolerance)(x1, x2, y)
+
+Evaluates residual tolerance, based on ``|f(x)|``
+"""
+(cc::ResidualTolerance)(x1, x2, y) = abs(y) < cc.tol
+
 
 """
     RelativeSolutionTolerance
 
 A tolerance type based on consecutive iterations of solution ``x`` of the equation ``f(x) = 0``
 """
-struct RelativeSolutionTolerance{FT} <: AbstractTolerance{FT}
-    tol::FT
+struct RelativeSolutionTolerance{N, XT} <: AbstractConvergenceCriteria{N}
+    tol::XT
 end
+RelativeSolutionTolerance(maxiters::Int, tol::XT) where {XT} =
+    RelativeSolutionTolerance{maxiters, XT}(tol)
+
+RelativeSolutionTolerance(tol::XT) where {XT} =
+    RelativeSolutionTolerance(maxiters_default, tol)
 
 """
-    (tol::RelativeSolutionTolerance)(x1, x2, y)
+    (cc::RelativeSolutionTolerance)(x1, x2, y)
 
 Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
 """
-(tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1)/x1) < tol.tol
+(cc::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1)/x1) < cc.tol
 
 """
     RelativeOrAbsoluteSolutionTolerance(rtol, atol)
@@ -224,19 +293,24 @@ A combined tolerance type based on relative and absolute tolerances.
 
 See [`RelativeSolutionTolerance`](@ref) and [`SolutionTolerance`](@ref)
 """
-struct RelativeOrAbsoluteSolutionTolerance{FT} <: AbstractTolerance{FT}
+struct RelativeOrAbsoluteSolutionTolerance{N, FT} <: AbstractConvergenceCriteria{N}
     rtol::FT
     atol::FT
 end
+RelativeOrAbsoluteSolutionTolerance(maxiters::Int, rtol::FT, atol::FT) where {FT} =
+    RelativeOrAbsoluteSolutionTolerance{maxiters, FT}(rtol, atol)
+
+RelativeOrAbsoluteSolutionTolerance(rtol::FT, atol::FT) where {FT} =
+    RelativeOrAbsoluteSolutionTolerance(maxiters_default, rtol, atol)
 
 """
-    (tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y)
+    (cc::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y)
 
 Evaluates combined relative and absolute tolerance, based
 on ``|(x2-x1)/x1| || |x2-x1|``
 """
-(tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
-    abs((x2 - x1)/x1) < tol.rtol || abs(x2 - x1) < tol.atol
+(cc::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
+    abs((x2 - x1)/x1) < cc.rtol || abs(x2 - x1) < cc.atol
 
 # TODO: CuArrays.jl has trouble with isapprox on 1.1
 # we use simple checks for now, will switch to relative checks later.
@@ -244,10 +318,9 @@ on ``|(x2-x1)/x1| || |x2-x1|``
 """
     sol = find_zero(
             f::F,
-            method::RootSolvingMethod{FT},
+            method::RootSolvingMethod{XT},
             soltype::SolutionType,
-            tol::Union{Nothing, AbstractTolerance} = nothing,
-            maxiters::Int = 10_000,
+            convergence_criteria::AbstractConvergenceCriteria = SolutionTolerance{maxiters, XT}(1e-3),
             )
 
 Finds the nearest root of `f`. Returns a the value of the root `x` such
@@ -270,37 +343,28 @@ function find_zero end
 # Main entry point: Dispatch to specific method
 function find_zero(
     f::F,
-    method::RootSolvingMethod{FT},
+    method::RootSolvingMethod{XT},
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 10_000,
-) where {FT <: FTypes, F <: Function}
-    if tol === nothing
-        tol = SolutionTolerance{eltype(FT)}(1e-3)
-    end
-    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
+    convergence_criteria::AbstractConvergenceCriteria = SolutionTolerance{10_000, XT}(1e-3),
+) where {XT, F <: Function}
+    return find_zero(f, method, method_args(method)..., soltype, convergence_criteria)
 end
 
 # Allow broadcast:
 function Broadcast.broadcasted(
     ::typeof(find_zero),
     f::F,
-    method::RootSolvingMethod{FT},
+    method::RootSolvingMethod{XT},
     soltype::SolutionType,
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 10_000,
-) where {FT <: FTypes, F}
-    if tol === nothing
-        tol = SolutionTolerance{eltype(FT)}(1e-3)
-    end
+    convergence_criteria::AbstractConvergenceCriteria = SolutionTolerance{10_000, XT}(1e-3),
+) where {XT, F}
     return broadcast(
         find_zero,
         f,
         method,
         method_args(method)...,
         soltype,
-        tol,
-        maxiters,
+        convergence_criteria,
     )
 end
 
@@ -320,25 +384,24 @@ method_args(method::SecantMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
     ::SecantMethod,
-    x0::FT,
-    x1::FT,
+    x0::XT,
+    x1::XT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
-    maxiters::Int,
-) where {F <: Function, FT <: FTypes}
+    convergence_criteria::AbstractConvergenceCriteria,
+) where {F, XT}
     y0 = f(x0)
     y1 = f(x1)
     x_history = init_history(soltype, x0)
-    y_history = init_history(soltype, y0)
-    for i in 1:maxiters
+    y_history = init_history(soltype, value(y0))
+    for i in 1:maxiters(convergence_criteria)
         Δx = x1 - x0
-        Δy = y1 - y0
+        Δy = value(y1) - value(y0)
         x0, y0 = x1, y1
         push_history!(x_history, x0, soltype)
-        push_history!(y_history, y0, soltype)
-        x1 -= y1 * Δx / Δy
+        push_history!(y_history, value(y0), soltype)
+        x1 -= value(y1) * Δx / Δy
         y1 = f(x1)
-        if tol(x0, x1, y1)
+        if convergence_criteria(x0, x1, value(y1))
             return SolutionResults(
                 soltype,
                 x1,
@@ -355,7 +418,7 @@ function find_zero(
         x1,
         false,
         y1,
-        maxiters,
+        maxiters(convergence_criteria),
         x_history,
         y_history,
     )
@@ -369,23 +432,22 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
-    maxiters::Int,
+    convergence_criteria::AbstractConvergenceCriteria,
 ) where {F <: Function, FT}
-    y0 = f(x0)
-    y1 = f(x1)
+    y0 = value(f(x0))
+    y1 = value(f(x1))
     @assert y0 * y1 < 0
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
     lastside = 0
     local x, y
-    for i in 1:maxiters
+    for i in 1:maxiters(convergence_criteria)
         x = (x0 * y1 - x1 * y0) / (y1 - y0)
         y = f(x)
         push_history!(x_history, x, soltype)
-        push_history!(y_history, y, soltype)
-        if y * y0 < 0
-            if tol(x, x1, y)
+        push_history!(y_history, value(y), soltype)
+        if value(y) * y0 < 0
+            if convergence_criteria(x, x1, value(y))
                 return SolutionResults(
                     soltype,
                     x,
@@ -396,13 +458,13 @@ function find_zero(
                     y_history,
                 )
             end
-            x1, y1 = x, y
+            x1, y1 = x, value(y)
             if lastside == +1
                 y0 /= 2
             end
             lastside = +1
         else
-            if tol(x0, x, y)
+            if convergence_criteria(x0, x, value(y))
                 return SolutionResults(
                     soltype,
                     x,
@@ -413,14 +475,14 @@ function find_zero(
                     y_history,
                 )
             end
-            x0, y0 = x, y
+            x0, y0 = x, value(y)
             if lastside == -1
                 y1 /= 2
             end
             lastside = -1
         end
     end
-    return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
+    return SolutionResults(soltype, x, false, y, maxiters(convergence_criteria), x_history, y_history)
 end
 
 
@@ -432,7 +494,14 @@ Compute the value and derivative `f(x)` using ForwardDiff.jl.
 function value_deriv(f, x::FT) where {FT}
     tag = typeof(ForwardDiff.Tag(f, FT))
     y = f(ForwardDiff.Dual{tag}(x, one(x)))
-    ForwardDiff.value(tag, y), ForwardDiff.partials(tag, y, 1)
+    v = ForwardDiff.value(tag, y)
+    if v isa CachedResult
+        fx = ForwardDiff.value(v.fx)
+        cr = CachedResult(fx, v.cache)
+        return (cr, ForwardDiff.partials(v.fx, 1))
+    else
+        return (v, ForwardDiff.partials(tag, y, 1))
+    end
 end
 
 method_args(method::NewtonsMethodAD) = (method.x0,)
@@ -440,25 +509,24 @@ method_args(method::NewtonsMethodAD) = (method.x0,)
 function find_zero(
     f::F,
     ::NewtonsMethodAD,
-    x0::FT,
+    x0::XT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
-    maxiters::Int,
-) where {F <: Function, FT}
+    convergence_criteria::AbstractConvergenceCriteria,
+) where {F <: Function, XT}
     local y
-    x_history = init_history(soltype, FT)
-    y_history = init_history(soltype, FT)
+    x_history = init_history(soltype, XT)
+    y_history = init_history(soltype, XT)
     if soltype isa VerboseSolution
         y, y′ = value_deriv(f, x0)
         push_history!(x_history, x0, soltype)
-        push_history!(y_history, y, soltype)
+        push_history!(y_history, value(y), soltype)
     end
-    for i in 1:maxiters
+    for i in 1:maxiters(convergence_criteria)
         y, y′ = value_deriv(f, x0)
-        x1 = x0 - y / y′
+        x1 = x0 - value(y) / y′
         push_history!(x_history, x1, soltype)
-        push_history!(y_history, y, soltype)
-        if tol(x0, x1, y)
+        push_history!(y_history, value(y), soltype)
+        if convergence_criteria(x0, x1, value(y))
             return SolutionResults(
                 soltype,
                 x1,
@@ -476,7 +544,7 @@ function find_zero(
         x0,
         false,
         y,
-        maxiters,
+        maxiters(convergence_criteria),
         x_history,
         y_history,
     )
@@ -489,22 +557,21 @@ function find_zero(
     ::NewtonsMethod,
     x0::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
-    maxiters::Int,
+    convergence_criteria::AbstractConvergenceCriteria,
 ) where {F <: Function, FT}
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
     if soltype isa VerboseSolution
         y, y′ = f(x0)
         push_history!(x_history, x0, soltype)
-        push_history!(y_history, y, soltype)
+        push_history!(y_history, value(y), soltype)
     end
-    for i in 1:maxiters
+    for i in 1:maxiters(convergence_criteria)
         y, y′ = f(x0)
-        x1 = x0 - y / y′
+        x1 = x0 - value(y) / y′
         push_history!(x_history, x1, soltype)
-        push_history!(y_history, y, soltype)
-        if tol(x0, x1, y)
+        push_history!(y_history, value(y), soltype)
+        if convergence_criteria(x0, x1, value(y))
             return SolutionResults(
                 soltype,
                 x1,
@@ -522,7 +589,7 @@ function find_zero(
         x0,
         false,
         y,
-        maxiters,
+        maxiters(convergence_criteria),
         x_history,
         y_history,
     )
