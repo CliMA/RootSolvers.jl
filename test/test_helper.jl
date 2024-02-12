@@ -31,25 +31,26 @@ end
 problem_size() = 5
 problem_size(::RootSolvingProblem{S,F,FF′,FT,FTA,N}) where {S,F,FF′,FT,FTA,N} = N
 float_types() = [Float32, Float64]
-get_tolerances(FT) = [
-  ResidualTolerance{FT}(1e-6),
-  SolutionTolerance{FT}(1e-3),
-  RelativeSolutionTolerance{FT}(sqrt(eps(FT))),
-  RelativeOrAbsoluteSolutionTolerance{FT}(100*eps(FT), 1e-6),
-  nothing,
+
+get_convergence_criteria(N, FT) = [
+  ResidualTolerance(N, FT(1e-6)),
+  SolutionTolerance(N, FT(1e-3)),
+  RelativeSolutionTolerance(N, FT(sqrt(eps(FT)))),
+  RelativeOrAbsoluteSolutionTolerance(N, FT(100*eps(FT)), FT(1e-6)),
 ]
 
-test_verbose!(::CompactSolution, sol, problem, tol, converged) = nothing
-function test_verbose!(::VerboseSolution, sol, problem, tol, converged)
+test_verbose!(::CompactCachedSolution, sol, problem, cc, converged) = nothing
+test_verbose!(::CompactSolution, sol, problem, cc, converged) = nothing
+function test_verbose!(::VerboseSolution, sol, problem, cc, converged)
   # Not sure what else to test here
   sol isa AbstractArray || @test length(sol.root_history) == length(sol.err_history)
 
   if converged
-    if tol isa ResidualTolerance
+    if cc isa ResidualTolerance
       if sol isa AbstractArray
-        @test all(map(x -> problem.f(x.root), sol) .< tol.tol)
+        @test all(map(x -> problem.f(x.root), sol) .< cc.tol)
       else
-        @test problem.f(sol.root) < tol.tol
+        @test problem.f(sol.root) < cc.tol
       end
     end
   end

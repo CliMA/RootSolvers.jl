@@ -25,7 +25,7 @@ filter!(x->x.x_init isa AbstractArray, problem_list)
     ff′,
     MethodType,
     x_init, x_lower, x_upper,
-    tol,
+    cc,
     dst::AbstractArray{FT, N},
 ) where {FT, N}
     i = @index(Group, Linear)
@@ -34,7 +34,7 @@ filter!(x->x.x_init isa AbstractArray, problem_list)
         # Store the solution in `dst`
         method = get_method(MethodType, x_init[i], x_lower[i], x_upper[i])
         _f = MethodType isa NewtonsMethodType ? ff′ : f
-        sol = find_zero(_f, method, CompactSolution(), tol)
+        sol = find_zero(_f, method, CompactSolution(), cc)
         dst[i] = sol.root
     end
 end
@@ -56,7 +56,7 @@ end
                     NewtonsMethodADType(),
                     NewtonsMethodType(),
                 )
-            for tol in get_tolerances(FT)
+            for cc in get_convergence_criteria(RootSolvers.maxiters_default, FT)
                 a_dst = Array{FT}(undef, n_elem)
                 d_dst = ArrayType(a_dst)
                 kernel! = solve_kernel!(device, work_groups)
@@ -67,7 +67,7 @@ end
                     x_init,
                     x_lower,
                     x_upper,
-                    tol,
+                    cc,
                     d_dst;
                     ndrange = ndrange
                 )
