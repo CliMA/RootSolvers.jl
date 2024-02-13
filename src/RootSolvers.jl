@@ -32,6 +32,10 @@ export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolution
 
 import ForwardDiff
 
+base_type(::Type{FT}) where {FT} = FT
+base_type(::Type{FT}) where {T, FT <: ForwardDiff.Dual{<:Any, T}} = base_type(T)
+base_type(::Type{FT}) where {T, FT <: AbstractArray{T}} = base_type(T)
+
 # Input types
 const FTypes = Union{Real, AbstractArray}
 
@@ -276,7 +280,7 @@ function find_zero(
     maxiters::Int = 10_000,
 ) where {FT <: FTypes, F <: Function}
     if tol === nothing
-        tol = SolutionTolerance{eltype(FT)}(1e-3)
+        tol = SolutionTolerance{base_type(FT)}(1e-3)
     end
     return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
 end
@@ -291,7 +295,7 @@ function Broadcast.broadcasted(
     maxiters::Int = 10_000,
 ) where {FT <: FTypes, F}
     if tol === nothing
-        tol = SolutionTolerance{eltype(FT)}(1e-3)
+        tol = SolutionTolerance{base_type(FT)}(1e-3)
     end
     return broadcast(
         find_zero,
@@ -323,7 +327,7 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
+    tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT <: FTypes}
     y0 = f(x0)
@@ -369,7 +373,7 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
+    tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT}
     y0 = f(x0)
@@ -442,7 +446,7 @@ function find_zero(
     ::NewtonsMethodAD,
     x0::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
+    tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT}
     local y
@@ -489,7 +493,7 @@ function find_zero(
     ::NewtonsMethod,
     x0::FT,
     soltype::SolutionType,
-    tol::AbstractTolerance{FT},
+    tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT}
     x_history = init_history(soltype, FT)
