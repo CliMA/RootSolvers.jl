@@ -15,7 +15,9 @@ julia> sol = find_zero(x -> x^2 - 100^2,
                        CompactSolution());
 
 julia> sol
-RootSolvers.CompactSolutionResults{Float64}(99.99999999994358, true)
+CompactSolutionResults{Float64}:
+├── Status: converged
+└── Root: 99.99999999994358
 
 julia> sol.root
 99.99999999994358
@@ -31,6 +33,7 @@ export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolution
     RelativeOrAbsoluteSolutionTolerance
 
 import ForwardDiff
+import Printf: @printf
 
 base_type(::Type{FT}) where {FT} = FT
 base_type(::Type{FT}) where {T, FT <: ForwardDiff.Dual{<:Any, T}} = base_type(T)
@@ -121,6 +124,27 @@ end
 SolutionResults(soltype::VerboseSolution, args...) =
     VerboseSolutionResults(args...)
 
+function Base.show(io::IO, sol::VerboseSolutionResults{FT}) where {FT}
+    status = sol.converged ? "\e[32mconverged\e[0m" : "\e[31mfailed to converge\e[0m"
+    println(io, "VerboseSolutionResults{$FT}:")
+    println(io, "├── Status: ", status)
+    println(io, "├── Root: ", sol.root)
+    println(io, "├── Error: ", sol.err)
+    println(io, "├── Iterations: ", sol.iter_performed)
+    println(io, "└── History:")
+    n_iters = length(sol.root_history)
+    for i in 1:n_iters
+        if n_iters > 20 && 9 < i < n_iters - 9
+            i == 11 && println(io, "    ⋮            ⋮                ⋮")
+            i == 12 && println(io, "    ⋮            ⋮                ⋮")
+            continue
+        end
+        prefix = i == n_iters ? "    └──" : "    ├──"
+        @printf(io, "%s iter %2d: x = %8.5g, err = %.4g\n", 
+            prefix, i, sol.root_history[i], sol.err_history[i])
+    end
+end
+
 """
     CompactSolution <: SolutionType
 
@@ -148,6 +172,13 @@ struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
 end
 SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
+
+function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
+    status = sol.converged ? "\e[32mconverged\e[0m" : "\e[31mfailed to converge\e[0m"
+    println(io, "CompactSolutionResults{$FT}:")
+    println(io, "├── Status: ", status)
+    println(io, "└── Root: ", sol.root)
+end
 
 init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
