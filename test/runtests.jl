@@ -1,5 +1,5 @@
 if get(ARGS, 1, "Array") == "CuArray"
-    using CUDA
+    import CUDA
     ArrayType = CUDA.CuArray
     CUDA.allowscalar(false)
 else

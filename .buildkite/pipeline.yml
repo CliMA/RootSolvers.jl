@@ -1,14 +1,11 @@
 agents:
-  queue: central
-  slurm_mem: 8G
-  modules: julia/1.9.3 cuda/12.2
+  queue: new-central
+  slurm_mem: 3G
+  modules: climacommon/2024_10_09
+  slurm_time: '00:20:00'
 
 env:
-  JULIA_VERSION: "1.9.3"
   OPENBLAS_NUM_THREADS: 1
-  CUDA_VERSION: "12.2"
-  OMPI_MCA_opal_warn_on_missing_libcuda: 0
-  JULIA_CPU_TARGET: 'broadwell;skylake'
 
 steps:
   - label: "init environment :computer:"

@@ -1,12 +1,9 @@
 if get(ARGS, 1, "Array") == "CuArray"
-    using CUDA
-    using CUDAKernels
+    import CUDA
     ArrayType = CUDA.CuArray
     CUDA.allowscalar(false)
-    get_device() = CUDADevice()
 else
     ArrayType = Array
-    get_device() = CPU()
 end
 
 @show ArrayType
@@ -41,7 +38,6 @@ end
 
 @testset "CPU/GPU kernel test" begin
     n_elem = problem_size()
-    device = get_device()
     work_groups = (1,)
     ndrange = (n_elem,)
 
@@ -59,7 +55,8 @@ end
             for tol in get_tolerances(FT)
                 a_dst = Array{FT}(undef, n_elem)
                 d_dst = ArrayType(a_dst)
-                kernel! = solve_kernel!(device, work_groups)
+                backend = get_backend(d_dst)
+                kernel! = solve_kernel!(backend, work_groups)
                 event = kernel!(
                     prob.f,
                     prob.ff′,
@@ -71,7 +68,7 @@ end
                     d_dst;
                     ndrange = ndrange
                 )
-                wait(device, event)
+                synchronize(backend)
 
                 @test all(Array(d_dst) .≈ prob.x̃)
             end

@@ -1,6 +1,5 @@
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
-CUDAKernels = "72cfdca4-0801-4ab0-bf6a-d52aa10adc57"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 RootSolvers = "7181ea78-2dcb-4de3-ab41-2b8ab5a31e74"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -8,6 +7,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CUDA = "4, 5"
-CUDAKernels = "0.4"
-KernelAbstractions = "0.8"
+KernelAbstractions = "0.8, 0.9"
 StaticArrays = "1"
