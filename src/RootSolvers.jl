@@ -371,6 +371,17 @@ function find_zero(
         x0, y0 = x1, y1
         push_history!(x_history, x0, soltype)
         push_history!(y_history, y0, soltype)
+        if abs(Δy) ≤ 2eps(y0)  # catch for division by zero (machine-small Δy)
+            return SolutionResults(
+                soltype,
+                x0,
+                abs(Δx) ≤ 2eps(x0), # only declare convergence if Δx is small
+                y0,
+                i,
+                x_history,
+                y_history,
+            )
+        end
         x1 -= y1 * Δx / Δy
         y1 = f(x1)
         if tol(x0, x1, y1)
