@@ -71,3 +71,5 @@ end
 end
 
 include("runtests_kernel.jl")
+
+include("test_printing.jl")
