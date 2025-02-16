@@ -70,6 +70,21 @@ end
     end
 end
 
+@testset "Check small Δy" begin
+    # Test PR: #56
+    ## Δy is small and we converged
+    sol = find_zero(x -> x^3, SecantMethod{Float64}(1e-8, 1e-8 + 1e-24), VerboseSolution())
+    @test sol.converged === true  # Δx is small
+    y0, y1 = sol.err_history
+    @test abs(y0 - y1) ≤ 2 * eps(Float64)  # Δy is small
+
+    ## Δy is small, but we didn't converge (e.g. found two distinct roots)
+    sol = find_zero(x -> x^2 - 1, SecantMethod{Float64}(-1, 1), VerboseSolution())
+    @test sol.converged === false  # Δx is large
+    y0, y1 = sol.err_history
+    @test abs(y0 - y1) ≤ 2 * eps(Float64)  # Δy is small
+end
+
 include("runtests_kernel.jl")
 
 include("test_printing.jl")
