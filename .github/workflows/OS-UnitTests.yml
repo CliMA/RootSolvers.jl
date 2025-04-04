@@ -1,4 +1,4 @@
-name: OS Unit Tests
+name: Unit Tests
 
 on:
   push:
@@ -8,76 +8,47 @@ on:
   pull_request:
   merge_group:
 
-jobs:
-  test-os:
-    timeout-minutes: 60
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+# Needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    timeout-minutes: 80
+    name: ci ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.7'
+          - '1.8'
+          - '1.9'
+          - '1.10'
+          - '1.11'
+        os:
+          - ubuntu-latest
+          - macOS-latest
+          - windows-latest
 
     steps:
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@0.4.0
-      with:
-        access_token: ${{ github.token }}
-
-    - name: Checkout
-      uses: actions/checkout@v2.2.0
-
-    # Setup a filter and only run if src/ test/ folder content changes
-    # or project depedencies
-    - uses: dorny/paths-filter@v2
-      id: filter
-      with:
-        filters: |
-          run_test:
-            - '.github/workflows/OS-UnitTests.yml'
-            - 'src/**'
-            - 'test/**'
-            - 'Project.toml'
-            - 'Manifest.toml'
-    - name: Set up Julia
-      uses: julia-actions/setup-julia@latest
-      if: steps.filter.outputs.run_test == 'true'
-      with:
-        version: 1.9
-
-    - name: Cache artifacts
-      uses: actions/cache@v1
-      if: steps.filter.outputs.run_test == 'true'
-      env:
-        cache-name: cache-artifacts
-      with:
-        path: ~/.julia/artifacts
-        key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-test-${{ env.cache-name }}-
-          ${{ runner.os }}-test-
-          ${{ runner.os }}-
-    - name: Install Project Packages
-      if: steps.filter.outputs.run_test == 'true'
-      run: |
-        julia --color=yes --project -e 'using Pkg; Pkg.instantiate()'
-        julia --color=yes --project -e 'using Pkg; Pkg.precompile(;strict=true)'
-        julia --color=yes --project -e 'using Pkg; Pkg.status()'
-    - name: Project Manifest
-      if: steps.filter.outputs.run_test == 'true'
-      run: |
-        julia --color=no --project -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
-    - name: Install Project Test Packages
-      if: steps.filter.outputs.run_test == 'true'
-      run: |
-        julia --color=yes --project=test -e 'using Pkg; Pkg.develop(path=pwd()); Pkg.instantiate()'
-        julia --color=yes --project=test -e 'using Pkg; Pkg.precompile(;strict=true)'
-        julia --color=yes --project=test -e 'using Pkg; Pkg.status()'
-    - name: Project Test Manifest
-      if: steps.filter.outputs.run_test == 'true'
-      run: |
-        julia --color=no --project=test -e 'using Pkg; Pkg.status(mode=Pkg.PKGMODE_MANIFEST)'
-    - name: Run Unit Tests
-      if: steps.filter.outputs.run_test == 'true'
-      run: |
-        julia --color=yes --check-bounds=yes --project=test test/runtests.jl
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@latest
+      - uses: julia-actions/julia-runtest@latest
+      - uses: julia-actions/julia-processcoverage@latest
+      - uses: codecov/codecov-action@v5
+        if: ${{ matrix.version == '1.10' }} && ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          files: lcov.info
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
