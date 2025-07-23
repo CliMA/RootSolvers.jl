@@ -2,7 +2,7 @@ using RootSolvers, Documenter
 
 pages = Any[
     "Home" => "index.md",
-    "Installation" => "Installation.md",
+    "Getting Started" => "GettingStarted.md",
     "API" => "API.md",
 ]
 

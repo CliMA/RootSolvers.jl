@@ -1,20 +1,23 @@
+# Determine array type for kernel testing - supports both CPU (Array) and GPU (CuArray)
+# This allows testing the same kernel code on different backends
 if get(ARGS, 1, "Array") == "CuArray"
     import CUDA
     ArrayType = CUDA.CuArray
-    CUDA.allowscalar(false)
+    CUDA.allowscalar(false)  # Ensure GPU operations are properly vectorized
 else
     ArrayType = Array
 end
 
 @show ArrayType
 
-# Re-include test_helper so we can run
-# this file on its own.
+# Re-include test_helper so we can run this file independently
+# This provides access to test problems, methods, and tolerances
 include("test_helper.jl")
 
 using KernelAbstractions
 
-# only grab array problems
+# Filter to only array-based problems since kernel tests require vectorized operations
+# This ensures we only test problems that can be solved in parallel
 filter!(x->x.x_init isa AbstractArray, problem_list)
 
 @kernel function solve_kernel!(
@@ -25,51 +28,85 @@ filter!(x->x.x_init isa AbstractArray, problem_list)
     tol,
     dst::AbstractArray{FT, N},
 ) where {FT, N}
-    i = @index(Group, Linear)
+    # Kernel function that solves root-finding problems in parallel
+    # Each thread/worker solves one root-finding problem independently
+    
+    i = @index(Group, Linear)  # Get the linear index for this thread/worker
     @inbounds begin
-        # Construct the method and solve the system.
-        # Store the solution in `dst`
+        # Construct the method and solve the system for this specific index
+        # Store the solution in the destination array
+        
+        # Create method instance for this specific problem (index i)
         method = get_method(MethodType, x_init[i], x_lower[i], x_upper[i])
+        
+        # Choose function based on method type:
+        # - NewtonsMethod requires function that returns (f(x), f'(x))
+        # - Other methods use standard function f(x)
         _f = MethodType isa NewtonsMethodType ? ff′ : f
+        
+        # Solve the root-finding problem for this specific index
+        # Use CompactSolution for memory efficiency in kernel context
         sol = find_zero(_f, method, CompactSolution(), tol)
+        
+        # Store the result in the destination array
         dst[i] = sol.root
     end
 end
 
 @testset "CPU/GPU kernel test" begin
-    n_elem = problem_size()
-    work_groups = (1,)
-    ndrange = (n_elem,)
+    # Test that root-finding methods work correctly in parallel kernel execution
+    # This validates GPU compatibility and parallel performance
+    
+    n_elem = problem_size()  # Get the size of test problems
+    work_groups = (1,)       # Single work group for simple 1D kernel
+    ndrange = (n_elem,)      # Range of indices to process
 
     for prob in problem_list
-        FT = typeof(prob.x̃)
-        x_init = prob.x_init
-        x_lower = prob.x_lower
-        x_upper = prob.x_upper
+        # Test each problem with all available methods and tolerances
+        FT = typeof(prob.x̃)  # Extract floating-point type from expected solution
+        x_init = prob.x_init  # Initial guesses
+        x_lower = prob.x_lower  # Lower bounds (for bracketing methods)
+        x_upper = prob.x_upper  # Upper bounds (for bracketing methods)
+        
         for MethodType in (
                     SecantMethodType(),
                     RegulaFalsiMethodType(),
                     NewtonsMethodADType(),
                     NewtonsMethodType(),
                 )
+            # Test all root-finding method types in kernel context
+            
             for tol in get_tolerances(FT)
-                a_dst = Array{FT}(undef, n_elem)
-                d_dst = ArrayType(a_dst)
+                # Test all tolerance types for the given floating-point type
+                
+                # Create destination arrays for results
+                a_dst = Array{FT}(undef, n_elem)  # CPU array for reference
+                d_dst = ArrayType(a_dst)          # Device array (CPU or GPU)
+                
+                # Get appropriate backend for the device array
                 backend = get_backend(d_dst)
+                
+                # Compile the kernel for the specific backend
                 kernel! = solve_kernel!(backend, work_groups)
+                
+                # Launch the kernel with all problem data
                 event = kernel!(
-                    prob.f,
-                    prob.ff′,
-                    MethodType,
-                    x_init,
-                    x_lower,
-                    x_upper,
-                    tol,
-                    d_dst;
-                    ndrange = ndrange
+                    prob.f,           # Function to find roots of
+                    prob.ff′,         # Function with derivatives (for Newton's method)
+                    MethodType,       # Type of root-finding method to use
+                    x_init,           # Initial guesses array
+                    x_lower,          # Lower bounds array
+                    x_upper,          # Upper bounds array
+                    tol,              # Convergence tolerance
+                    d_dst;            # Destination array for results
+                    ndrange = ndrange # Specify the range of indices to process
                 )
+                
+                # Ensure all kernel operations complete before checking results
                 synchronize(backend)
-
+                
+                # Validate that all computed roots match the expected solution
+                # Convert device array back to CPU array for comparison
                 @test all(Array(d_dst) .≈ prob.x̃)
             end
         end

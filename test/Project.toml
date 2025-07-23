@@ -8,5 +8,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 CUDA = "4, 5"
-KernelAbstractions = "0.8, 0.9"
+KernelAbstractions = "0.9"
 StaticArrays = "1"
