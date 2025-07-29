@@ -73,7 +73,7 @@ sol = find_zero(f, method, soltype, tol)
 #### 5. Interpret Results
 - `sol.converged`: `true` if a root was found.
 - `sol.root`: The root value.
-- `sol.err`, `sol.iter_performed`, `sol.root_history` (available in `VerboseSolutionResults`).
+- `sol.err`, `sol.iter_performed`, `sol.root_history` (available with `VerboseSolution`).
 
 
 ### Specific Example: Newton's Method with a Provided Derivative
@@ -120,11 +120,15 @@ f(x) = x.^2 .- 2.0
 
 # Solve the root-finding problem across the entire field
 method = SecantMethod(x0, x1)
-sol = find_zero.(f, method, CompactSolution()) # Note the dot syntax
+sol = find_zero.(f, method, CompactSolution()) # sol is an Array of structs
 
 # Results
-println("All converged: ", all(sol.converged))
-println("Root field shape: ", size(sol.root))
+# Use getproperty.() to extract the fields from each struct in the array
+converged_field = getproperty.(sol, :converged)
+root_field = getproperty.(sol, :root)
+
+println("All converged: ", all(converged_field))
+println("Root field shape: ", size(root_field))
 ```
 
 ### GPU Acceleration for Batch Processing
@@ -151,8 +155,11 @@ method = SecantMethod(x0, x1)
 sol = find_zero.(f, method, CompactSolution())
 
 # Results are on the GPU
-println("All converged: ", all(sol.converged))
-println("Root array shape: ", size(sol.root))
+converged_field = getproperty.(sol, :converged)
+root_field = getproperty.(sol, :root)
+
+println("All converged: ", all(converged_field))
+println("Root field shape: ", size(root_field))
 ```
 
 ---
@@ -165,8 +172,8 @@ println("Root array shape: ", size(sol.root))
 | :--- | :--- | :--- |
 | `SecantMethod` | 2 initial guesses | No derivatives, **fast** convergence|
 | `RegulaFalsiMethod` | Bracketing interval | **Guaranteed** convergence |
-| `NewtonsMethodAD` | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff |
-| `NewtonsMethod` | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives |
+| `NewtonsMethodAD` | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff, robust step control |
+| `NewtonsMethod` | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives, robust step control |
 
 ### Available Tolerance Types
 

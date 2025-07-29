@@ -30,8 +30,8 @@ The following structs are used to select the root-finding algorithm.
 |:--------------------|:------------------------------------|:--------------------------------|
 | `SecantMethod`      | 2 initial guesses                   | No derivatives, **fast** convergence|
 | `RegulaFalsiMethod` | Bracketing interval (sign change)   | **Guaranteed** convergence      |
-| `NewtonsMethodAD`   | 1 initial guess, differentiable f   | **Fastest**, uses autodiff      |
-| `NewtonsMethod`     | 1 initial guess, f and f' provided  | **Analytical** derivatives      |
+| `NewtonsMethodAD`   | 1 initial guess, differentiable f   | **Fastest**, uses autodiff, robust step control |
+| `NewtonsMethod`     | 1 initial guess, f and f' provided  | **Analytical** derivatives, robust step control |
 
 ```@docs
 SecantMethod
@@ -54,8 +54,6 @@ These types control the level of detail in the output returned by `find_zero`.
 ```@docs
 CompactSolution
 VerboseSolution
-CompactSolutionResults
-VerboseSolutionResults
 ```
 
 ---
@@ -97,4 +95,5 @@ These functions are used internally by the solvers but are exported and may be u
 ```@docs
 method_args
 value_deriv
+default_tol
 ```

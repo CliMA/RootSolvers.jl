@@ -14,7 +14,7 @@ Pkg.add("RootSolvers")
 using RootSolvers
 
 # Find the root of x^2 - 100^2 using the secant method
-sol = find_zero(x -> x^2 - 100^2, SecantMethod{Float64}(0.0, 1000.0))
+sol = find_zero(x -> x^2 - 100^2, SecantMethod(0.0, 1000.0))
 
 if sol.converged
     println("Root found: ", sol.root)
@@ -26,4 +26,3 @@ end
 ## Documentation
 - [Getting Started](GettingStarted.md)
 - [API Reference](API.md)
-

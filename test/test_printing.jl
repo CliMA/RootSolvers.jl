@@ -1,6 +1,6 @@
 using Printf
 
-@testset "solution pretty printing" begin
+@testset "Solution pretty printing" begin
     # Test that solution objects display correctly with pretty printing
     # This validates the show methods for both solution types
     

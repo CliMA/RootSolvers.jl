@@ -169,20 +169,20 @@ for FT in float_types()
     FT(3),                               # Upper bound for bracketing
     ))
 
-  # Steep exponential function: f(x) = exp(20*(x-1)) - 1, solution x = 1
-  # This tests methods on functions with very large gradients
+  # Steep exponential function: f(x) = exp(5*(x-1)) - 1, solution x = 1
+  # This tests methods on functions with large gradients
   push!(problem_list, RootSolvingProblem(
     "steep exponential function",
-    x -> exp(3 * (x - 1)) - 1,          # Function f(x) = exp(20*(x-1)) - 1
-    x -> (exp(3 * (x - 1)) - 1, 3 * exp(3 * (x - 1))), # Function and derivative
+    x -> exp(5 * (x - 1)) - 1,          # Function f(x) = exp(5*(x-1)) - 1
+    x -> (exp(5 * (x - 1)) - 1, 5 * exp(5 * (x - 1))), # Function and derivative
     FT(1),                               # Exact solution x = 1
     FT(0.5),                             # Initial guess x₀ = 0.5
     FT(0.5),                             # Lower bound for bracketing
     FT(1.5),                             # Upper bound for bracketing
     ))
 
-  # # Trigonometric function: f(x) = sin(x), solution x = π
-  # # This tests finding a specific root when multiple roots exist
+  # Trigonometric function: f(x) = sin(x), solution x = π
+  # This tests finding a specific root when multiple roots exist
   push!(problem_list, RootSolvingProblem(
     "trigonometric function",
     x -> sin(x),                         # Function f(x) = sin(x)
