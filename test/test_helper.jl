@@ -116,6 +116,7 @@ function get_methods(x_init, x_lower, x_upper)
     return (
     SecantMethod(x_lower, x_upper),      # Two-point method using linear interpolation
     RegulaFalsiMethod(x_lower, x_upper), # Bracketing method with guaranteed convergence
+    BrentsMethod(x_lower, x_upper),      # Brent's method with superlinear convergence
     NewtonsMethodAD(x_init),             # Newton's method with automatic differentiation
     NewtonsMethod(x_init)                # Newton's method with user-provided derivative
     )
@@ -126,6 +127,7 @@ end
 # are not `isbits` with `CuArray`s, but types are.
 struct SecantMethodType end
 struct RegulaFalsiMethodType end
+struct BrentsMethodType end
 struct NewtonsMethodADType end
 struct NewtonsMethodType end
 
@@ -133,6 +135,7 @@ struct NewtonsMethodType end
 # These allow the same kernel code to work with different method types
 get_method(::SecantMethodType, x_init, x_lower, x_upper) = SecantMethod(x_lower, x_upper)
 get_method(::RegulaFalsiMethodType, x_init, x_lower, x_upper) = RegulaFalsiMethod(x_lower, x_upper)
+get_method(::BrentsMethodType, x_init, x_lower, x_upper) = BrentsMethod(x_lower, x_upper)
 get_method(::NewtonsMethodADType, x_init, x_lower, x_upper) = NewtonsMethodAD(x_init)
 get_method(::NewtonsMethodType, x_init, x_lower, x_upper) = NewtonsMethod(x_init)
 

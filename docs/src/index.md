@@ -21,6 +21,10 @@ if sol.converged
 else
     println("Root not found")
 end
+
+# Or use Brent's method for robust bracketing
+sol = find_zero(x -> x^2 - 100^2, BrentsMethod(-200.0, 0.0))
+println("Root found: ", sol.root)
 ```
 
 ## Documentation

@@ -8,9 +8,6 @@ RootSolvers.jl is a Julia package for finding roots of nonlinear equations using
 
 The package is registered in the Julia General registry.
 
-**Requirements:**
-- Julia 1.8 or newer
-
 **Stable Release:**
 ```julia
 using Pkg
@@ -52,6 +49,9 @@ Pick a method and provide initial guesses. The type parameter (e.g., `Float64`) 
 ```julia
 # For SecantMethod, provide two initial guesses
 method = SecantMethod(1.0, 3.0)
+
+# For BrentsMethod, provide a bracketing interval
+method = BrentsMethod(-1.0, 3.0)
 ```
 
 #### 3. (Optional) Set Tolerance and Solution Type
@@ -96,6 +96,28 @@ method = NewtonsMethod(1.0)
 sol = find_zero(f_with_deriv, method)
 
 println("Root found: ", sol.root) # Expected: 2.0
+```
+
+### Specific Example: Brent's Method for Robust Root Finding
+
+Brent's method combines the bisection method, secant method, and inverse quadratic interpolation. It provides superlinear convergence while maintaining the robustness of bracketing methods.
+
+#### 1. Define Your Function
+```julia
+# This function finds the root of f(x) = x^3 - 2.
+f(x) = x^3 - 2
+```
+
+#### 2. Choose the Method and Call `find_zero`
+```julia
+# Provide a bracketing interval where f(x0) and f(x1) have opposite signs
+method = BrentsMethod(-1.0, 2.0)  # f(-1) = -3, f(2) = 6
+
+# Solve the root-finding problem
+sol = find_zero(f, method)
+
+println("Root found: ", sol.root) # Expected: ≈ 1.259921
+println("Converged: ", sol.converged)
 ```
 
 ---
@@ -148,7 +170,7 @@ x0 = CUDA.fill(1.0f0, 1000, 1000)  # 1M initial guesses on GPU
 x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
 
 # Define GPU-compatible function
-f(x) = x.^3 .- x .- 2.0
+f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using broadcasting
 method = SecantMethod(x0, x1)
@@ -172,6 +194,7 @@ println("Root field shape: ", size(root_field))
 | :--- | :--- | :--- |
 | `SecantMethod` | 2 initial guesses | No derivatives, **fast** convergence|
 | `RegulaFalsiMethod` | Bracketing interval | **Guaranteed** convergence |
+| `BrentsMethod` | Bracketing interval | **Superlinear** convergence, robust |
 | `NewtonsMethodAD` | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff, robust step control |
 | `NewtonsMethod` | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives, robust step control |
 
@@ -194,6 +217,6 @@ println("Root field shape: ", size(root_field))
 ---
 
 ## Troubleshooting
-- If not converging, try different initial guesses or a bracketing method (`RegulaFalsiMethod`).
+- If not converging, try different initial guesses or a bracketing method (`BrentsMethod`).
 - Use `VerboseSolution()` to inspect the iteration history and diagnose issues.
 - Adjust the tolerance for stricter or looser convergence criteria.

@@ -41,7 +41,7 @@ sol_newton = find_zero(x -> x^3 - 27,
 module RootSolvers
 
 export find_zero,
-    SecantMethod, RegulaFalsiMethod, NewtonsMethodAD, NewtonsMethod
+    SecantMethod, RegulaFalsiMethod, BrentsMethod, NewtonsMethodAD, NewtonsMethod
 export CompactSolution, VerboseSolution
 export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance,
     RelativeOrAbsoluteSolutionTolerance
@@ -120,6 +120,37 @@ sol = find_zero(x -> x^3 - 2, method)
 ```
 """
 struct RegulaFalsiMethod{FT} <: RootSolvingMethod{FT}
+    x0::FT
+    x1::FT
+end
+
+"""
+    BrentsMethod{FT} <: RootSolvingMethod{FT}
+
+Brent's method for root finding, which combines the bisection method, secant method, and inverse quadratic interpolation.
+This is a bracketing method that maintains the sign change property and provides superlinear convergence.
+
+The method requires that `f(x0)` and `f(x1)` have opposite signs, ensuring that
+a root exists in the interval `[x0, x1]`.
+
+## Convergence
+- **Order**: Superlinear (faster than Regula Falsi)
+- **Requirements**: Bracketing interval with `f(x0) * f(x1) < 0`
+- **Advantages**: Guaranteed convergence, fast convergence, robust
+- **Disadvantages**: More complex than simpler bracketing methods
+
+## Fields
+- `x0::FT`: Lower bound of bracketing interval
+- `x1::FT`: Upper bound of bracketing interval
+
+## Example
+```julia
+# Find root of x^3 - 2 in interval [-1, 2]
+method = BrentsMethod{Float64}(-1.0, 2.0)
+sol = find_zero(x -> x^3 - 2, method)
+```
+"""
+struct BrentsMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
     x1::FT
 end
@@ -629,9 +660,12 @@ println("Default tolerance for Float64: ", tol)
 # Default tolerance for Float64: SolutionTolerance{Float64}(1e-4)
 ```
 """
+function default_tol(::Type{Float64})
+    return SolutionTolerance{Float64}(1e-4)
+end
+
 function default_tol(::Type{FT}) where {FT}
-    tol_value = ifelse(FT == Float64, 1e-4, 1e-3)
-    return SolutionTolerance{base_type(FT)}(tol_value)
+    return SolutionTolerance{base_type(FT)}(1e-3)
 end
 
 # Update rule for Regula Falsi method
@@ -640,7 +674,8 @@ _regula_falsi_rule(x0, y0, x1, y1) = (x0 * y1 - x1 * y0) / (y1 - y0)
 # Generic helper for bracketing methods.
 # This function takes an `update_rule` function as an argument, which calculates
 # the next point in the iteration. This allows for easy extension to other
-# bracketing methods like Brent's method.
+# bracketing methods, such as simplified versions of Brent's method with secant 
+# updates and bisection fallback.
 function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
     FT = typeof(x0)
     if !isfinite(x0) || !isfinite(x1)
@@ -653,7 +688,10 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
     y0 = f(x0)
     y1 = f(x1)
     if y0 * y1 >= 0
-        error("Bracketed methods require that f(x0) and f(x1) have opposite signs (got f(x0)=$(y0), f(x1)=$(y1)). The initial interval must bracket a root.")
+        # Return failed solution instead of error for GPU compatibility
+        x_history = init_history(soltype, x0)
+        y_history = init_history(soltype, y0)
+        return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
     end
     
     x_history = init_history(soltype, x0)
@@ -694,6 +732,95 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
     end
     
     return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
+end
+
+# Dedicated helper for Brent's method, which combines bisection, secant, and inverse quadratic interpolation.
+function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
+    FT = typeof(x0)
+    if !isfinite(x0) || !isfinite(x1)
+        y = FT(Inf)
+        x_history = init_history(soltype, FT)
+        y_history = init_history(soltype, FT)
+        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
+    end
+
+    a, b = x0, x1
+    fa, fb = f(a), f(b)
+
+    if fa * fb >= 0
+        # Return failed solution instead of error for GPU compatibility
+        x_history = init_history(soltype, a)
+        y_history = init_history(soltype, fa)
+        return SolutionResults(soltype, a, false, fa, 0, x_history, y_history)
+    end
+
+    if abs(fa) < abs(fb)
+        a, b = b, a
+        fa, fb = fb, fa
+    end
+
+    x_history = init_history(soltype, a)
+    y_history = init_history(soltype, fa)
+    push_history!(x_history, b, soltype)
+    push_history!(y_history, fb, soltype)
+
+    c = a
+    fc = fa
+    d = b - a
+    e = d
+
+    for i in 1:maxiters
+        # Convergence check
+        if tol(a, b, fb) || fb == 0
+            return SolutionResults(soltype, b, true, fb, i, x_history, y_history)
+        end
+
+        # On GPUs, `ifelse` is often more performant than `if-else` blocks
+        # by avoiding branch divergence.
+        s = ifelse(fa != fc && fb != fc,
+                   # Inverse Quadratic Interpolation
+                   a * fb * fc / ((fa - fb) * (fa - fc)) +
+                   b * fa * fc / ((fb - fa) * (fb - fc)) +
+                   c * fa * fb / ((fc - fa) * (fc - fb)),
+                   # Secant Method
+                   b - fb * (b - a) / (fb - fa))
+
+        # Check if interpolation result is acceptable
+        m = (3*a + b) / 4
+        s_is_between = ifelse(a < b, s > m && s < b, s < m && s > b)
+        
+        # If step is not acceptable, fall back to bisection
+        use_bisection = !s_is_between || abs(s - b) >= abs(e / 2) || abs(e) < eps(FT)
+        
+        s_new = ifelse(use_bisection, (a + b) / 2, s)
+        d_new = s_new - b
+        e_new = ifelse(use_bisection, d_new, d)
+        s, d, e = s_new, d_new, e_new
+
+        fs = f(s)
+        push_history!(x_history, s, soltype)
+        push_history!(y_history, fs, soltype)
+
+        c, fc = b, fb
+
+        # Update bracket
+        cond_bracket = fa * fs < 0
+        a_new = ifelse(cond_bracket, a, s)
+        fa_new = ifelse(cond_bracket, fa, fs)
+        b_new = ifelse(cond_bracket, s, b)
+        fb_new = ifelse(cond_bracket, fs, fb)
+        a, fa, b, fb = a_new, fa_new, b_new, fb_new
+
+        # Ensure abs(fb) <= abs(fa)
+        cond_swap = abs(fa) < abs(fb)
+        a_new_swap = ifelse(cond_swap, b, a)
+        b_new_swap = ifelse(cond_swap, a, b)
+        fa_new_swap = ifelse(cond_swap, fb, fa)
+        fb_new_swap = ifelse(cond_swap, fa, fb)
+        a, fa, b, fb = a_new_swap, fa_new_swap, b_new_swap, fb_new_swap
+    end
+
+    return SolutionResults(soltype, b, false, fb, maxiters, x_history, y_history)
 end
 
 # Dedicated helper for the Secant method (an open, two-point method)
@@ -890,6 +1017,19 @@ function find_zero(
     maxiters::Int,
 ) where {F <: Function, FT}
     return _find_zero_bracketed(f, _regula_falsi_rule, x0, x1, soltype, tol, maxiters)
+end
+
+method_args(method::BrentsMethod) = (method.x0, method.x1)
+function find_zero(
+    f::F,
+    ::BrentsMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 end
 
 method_args(method::NewtonsMethodAD) = (method.x0,)

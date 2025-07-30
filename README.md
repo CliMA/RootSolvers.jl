@@ -6,7 +6,7 @@
 
 A high-performance root solver package with GPU support and broadcasting across abstract types
 
-RootSolvers.jl provides robust, efficient numerical methods for finding roots of nonlinear equations. It supports broadcasting across abstract types including `ClimaCore` fields, GPU arrays, and custom field types, making it ideal for high-performance computing applications in climate modeling, machine learning, and scientific computing.
+RootSolvers.jl provides robust, efficient numerical methods for finding roots of nonlinear equations. It supports broadcasting across abstract types including GPU arrays and custom field types, making it ideal for high-performance computing applications in climate modeling, machine learning, and scientific computing.
 
 |                           |                                                                          |
 |--------------------------:|:-------------------------------------------------------------------------|
@@ -35,7 +35,7 @@ RootSolvers.jl provides robust, efficient numerical methods for finding roots of
 
 ## Features
 
-- **Multiple Root-Finding Methods**: Secant, Regula Falsi, Newton's method with automatic differentiation
+- **Multiple Root-Finding Methods**: Secant, Regula Falsi, Brent's method, Newton's method with automatic differentiation
 - **GPU Support**: Full GPU acceleration with CUDA.jl and other GPU array types
 - **Broadcasting**: Allows broadcasting over distributed arrays and custom field types
 - **Flexible Convergence Criteria**: Multiple tolerance types for different applications

@@ -24,6 +24,7 @@ steps:
       - "julia --project=test test/runtests.jl"
     agents:
       slurm_ntasks: 1
+    timeout_in_minutes: 60
 
   - label: "GPU tests"
     command:
@@ -31,3 +32,4 @@ steps:
     agents:
       slurm_ntasks: 1
       slurm_gpus: 1
+    timeout_in_minutes: 60

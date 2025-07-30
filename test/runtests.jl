@@ -114,10 +114,6 @@ end
             for tol in get_tolerances(FT)
                 # Test all tolerance types for the given floating-point type
                 for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper) 
-                #for method in [SecantMethod(problem.x_lower, problem.x_upper)]
-                #for method in [NewtonsMethod(problem.x_init)]
-                #for method in [NewtonsMethodAD(problem.x_init)]
-                #for method in [RegulaFalsiMethod(problem.x_lower, problem.x_upper)]
                     # Test all applicable root-finding methods for this problem
                     
                     # Choose function based on method type:
