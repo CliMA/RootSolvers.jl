@@ -10,8 +10,15 @@ and tolerance criteria.
 ## Supported Methods
 - **Secant Method**: Requires two initial guesses, uses linear interpolation
 - **Regula Falsi Method**: Requires bracketing interval with sign change
+- **Brent's Method**: Requires bracketing interval, combines bisection, secant, and inverse quadratic interpolation
 - **Newton's Method with AD**: Requires one initial guess, uses automatic differentiation
 - **Newton's Method**: Requires one initial guess and user-provided derivative
+
+## Method Selection Guide
+- **Bracketing methods** (Regula Falsi, Brent's): Use when you know an interval containing the root
+- **Brent's method**: Recommended for robust, guaranteed convergence with superlinear rate
+- **Secant method**: Good when you have two guesses but no bracketing interval
+- **Newton's methods**: Fastest convergence when you have a good initial guess
 
 ## Example
 
@@ -31,6 +38,11 @@ println(sol)
 # Access the root value
 root_value = sol.root  # 99.99999999994358
 
+# Use Brent's method for robust convergence with bracketing interval
+sol_brent = find_zero(x -> x^3 - 8,
+                     BrentsMethod{Float64}(-1.0, 3.0),
+                     CompactSolution());
+
 # Use Newton's method with automatic differentiation for faster convergence
 sol_newton = find_zero(x -> x^3 - 27,
                       NewtonsMethodAD{Float64}(2.0),
@@ -41,9 +53,16 @@ sol_newton = find_zero(x -> x^3 - 27,
 module RootSolvers
 
 export find_zero,
-    SecantMethod, RegulaFalsiMethod, BrentsMethod, NewtonsMethodAD, NewtonsMethod
-export CompactSolution, VerboseSolution
-export AbstractTolerance, ResidualTolerance, SolutionTolerance, RelativeSolutionTolerance,
+    RootSolvingMethod,
+    SecantMethod,
+    RegulaFalsiMethod,
+    BrentsMethod,
+    NewtonsMethodAD,
+    NewtonsMethod
+export SolutionType, CompactSolution, VerboseSolution
+export ResidualTolerance,
+    SolutionTolerance,
+    RelativeSolutionTolerance,
     RelativeOrAbsoluteSolutionTolerance
 export method_args, value_deriv, default_tol
 
@@ -57,6 +76,44 @@ base_type(::Type{FT}) where {T, FT <: AbstractArray{T}} = base_type(T)
 # Input types
 const FTypes = Union{Real, AbstractArray}
 
+"""
+    RootSolvingMethod{FT} <: AbstractType
+
+Abstract type for root-finding methods in RootSolvers.jl.
+
+This is the base type for all numerical methods used to find roots of scalar functions.
+Each concrete method type should implement the `method_args` function to extract
+initial guesses and parameters for the solver.
+
+## Type Parameters
+- `FT`: The floating-point type for computations (e.g., `Float64`, `Float32`)
+
+## Concrete Implementations
+- [`SecantMethod{FT}`](@ref): Linear interpolation between two points
+- [`RegulaFalsiMethod{FT}`](@ref): Bracketing method with linear interpolation
+- [`BrentsMethod{FT}`](@ref): Robust bracketing method combining multiple techniques
+- [`NewtonsMethodAD{FT}`](@ref): Newton's method with automatic differentiation
+- [`NewtonsMethod{FT}`](@ref): Newton's method with user-provided derivatives
+
+## Interface Requirements
+All concrete subtypes must implement:
+- `method_args(method)`: Return initial guesses as a tuple
+- `find_zero(f, method, args..., soltype, tol, maxiters)`: Main solver implementation
+
+## Example
+```julia
+# Define a custom method
+struct MyCustomMethod{FT} <: RootSolvingMethod{FT}
+    x0::FT
+end
+
+# Implement required interface
+method_args(method::MyCustomMethod) = (method.x0,)
+
+# Use with find_zero
+sol = find_zero(x -> x^2 - 4, MyCustomMethod{Float64}(1.0))
+```
+"""
 abstract type RootSolvingMethod{FT <: FTypes} end
 Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
@@ -163,11 +220,10 @@ This method provides quadratic convergence when close to the root and the deriva
 is non-zero. The implementation includes step size limiting and backtracking line search
 for robustness.
 
-The method uses the iteration:
+The method uses the iteration
 ```math
 x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}
 ```
-
 where the derivative `f'(x_n)` is computed using ForwardDiff.jl.
 
 ## Convergence
@@ -197,7 +253,7 @@ Newton's method for root finding where the user provides both the function and i
 This method provides quadratic convergence when close to the root. The implementation includes
 step size limiting and backtracking line search for robustness.
 
-The method uses the iteration:
+The method uses the iteration
 ```math
 x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}
 ```
@@ -227,6 +283,39 @@ struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
 end
 
+"""
+    SolutionType <: AbstractType
+
+Abstract type for solution formats in RootSolvers.jl.
+
+This is the base type for all solution types that control the level of detail
+returned by `find_zero`. Each concrete solution type should implement the
+`SolutionResults` constructor and history management functions.
+
+## Concrete Implementations
+- [`CompactSolution`](@ref): Memory-efficient, GPU-compatible solution with minimal output
+- [`VerboseSolution`](@ref): CPU-only solution with detailed diagnostics and iteration history
+
+## Interface Requirements
+All concrete subtypes must implement:
+- `SolutionResults(soltype, args...)`: Constructor for the corresponding results type
+- `init_history(soltype, x)`: Initialize history storage for the solution type
+- `push_history!(history, x, soltype)`: Add a value to the history
+
+## Example
+```julia
+# Define a custom solution type
+struct MySolution <: SolutionType end
+
+# Implement required interface
+SolutionResults(soltype::MySolution, args...) = MySolutionResults(args...)
+init_history(::MySolution, x) = [x]
+push_history!(history, x, ::MySolution) = push!(history, x)
+
+# Use with find_zero
+sol = find_zero(x -> x^2 - 4, SecantMethod(1.0, 3.0), MySolution())
+```
+"""
 abstract type SolutionType end
 Base.broadcastable(soltype::SolutionType) = Ref(soltype)
 
@@ -295,9 +384,12 @@ SolutionResults(soltype::VerboseSolution, args...) =
     VerboseSolutionResults(args...)
 
 function Base.show(io::IO, sol::VerboseSolutionResults{FT}) where {FT}
-    status = sol.converged ? "\e[32mconverged\e[0m" : "\e[31mfailed to converge\e[0m"
+    color = sol.converged ? :green : :red
+    status = sol.converged ? "converged" : "failed to converge"
     println(io, "VerboseSolutionResults{$FT}:")
-    println(io, "├── Status: ", status)
+    print(io, "├── Status: ")
+    printstyled(io, status; color)
+    println(io)
     println(io, "├── Root: ", sol.root)
     println(io, "├── Error: ", sol.err)
     println(io, "├── Iterations: ", sol.iter_performed)
@@ -310,8 +402,14 @@ function Base.show(io::IO, sol::VerboseSolutionResults{FT}) where {FT}
             continue
         end
         prefix = i == n_iters ? "    └──" : "    ├──"
-        @printf(io, "%s iter %2d: x = %8.5g, err = %.4g\n", 
-            prefix, i, sol.root_history[i], sol.err_history[i])
+        @printf(
+            io,
+            "%s iter %2d: x = %8.5g, err = %.4g\n",
+            prefix,
+            i,
+            sol.root_history[i],
+            sol.err_history[i]
+        )
     end
 end
 
@@ -358,17 +456,25 @@ SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
 
 function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
-    status = sol.converged ? "\e[32mconverged\e[0m" : "\e[31mfailed to converge\e[0m"
-    println(io, "CompactSolutionResults{$FT}:")
-    println(io, "├── Status: ", status)
-    println(io, "└── Root: ", sol.root)
+    color = sol.converged ? :green : :red
+    if sol isa get(io, :typeinfo, Any) <: CompactSolutionResults
+        # compact printing within a vector or similar
+        printstyled(io, sol.root; color)
+    else
+        # standalone printing
+        status = sol.converged ? "converged" : "failed to converge"
+        println(io, "CompactSolutionResults{$FT}:")
+        print(io, "├── Status: ")
+        printstyled(io, status; color)
+        println(io)
+        print(io, "└── Root: ", sol.root)
+    end
 end
 
 init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
 init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
-init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} =
-    nothing
+init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} = nothing
 
 function push_history!(
     history::Vector{FT},
@@ -403,11 +509,49 @@ function push_history!(
     nothing
 end
 
+"""
+    AbstractTolerance{FT} <: AbstractType
+
+Abstract type for tolerance criteria in RootSolvers.jl.
+
+This is the base type for all tolerance types that define convergence criteria
+for root-finding algorithms. Each concrete tolerance type should implement
+the callable interface `(tol)(x1, x2, y)` for convergence checking.
+
+## Type Parameters
+- `FT`: The floating-point type for tolerance values (e.g., `Float64`, `Float32`)
+
+## Concrete Implementations
+- [`ResidualTolerance{FT}`](@ref): Based on `|f(x)|`
+- [`SolutionTolerance{FT}`](@ref): Based on `|x_{n+1} - x_n|`
+- [`RelativeSolutionTolerance{FT}`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
+- [`RelativeOrAbsoluteSolutionTolerance{FT}`](@ref): Combined relative and absolute tolerance
+
+## Interface Requirements
+All concrete subtypes must implement:
+- `(tol)(x1, x2, y)`: Check convergence using three arguments (previous iterate, current iterate, function value)
+- `(tol)(y)`: Check convergence using only function value (for early exit)
+
+## Example
+```julia
+# Define a custom tolerance type
+struct MyTolerance{FT} <: AbstractTolerance{FT}
+    threshold::FT
+end
+
+# Implement the interface
+(tol::MyTolerance)(x1, x2, y) = abs(x2 - x1) < tol.threshold
+(tol::MyTolerance)(y) = abs(y) < tol.threshold
+
+# Use with find_zero
+sol = find_zero(x -> x^2 - 4, SecantMethod(1.0, 3.0), CompactSolution(), MyTolerance(1e-6))
+```
+"""
 abstract type AbstractTolerance{FT <: FTypes} end
 Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
 """
-    ResidualTolerance{FT} <: AbstractTolerance{FT}
+    ResidualTolerance{FT} 
 
 A convergence criterion based on the absolute value of the residual (function value).
 The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance.
@@ -439,7 +583,22 @@ Evaluates residual tolerance, based on ``|f(x)|``
 (tol::ResidualTolerance)(x1, x2, y) = abs(y) < tol.tol
 
 """
-    SolutionTolerance{FT} <: AbstractTolerance{FT}
+    (tol::AbstractTolerance)(y)
+
+Evaluates a residual-only tolerance, used for early exit if ``|f(x)|``
+is already sufficiently small.
+"""
+(tol::AbstractTolerance)(y) = abs(y) < max(eps(typeof(y)), typeof(y)(1e-8))
+
+"""
+    (tol::ResidualTolerance)(y)
+
+Evaluates residual tolerance based on ``|f(x)|``, using the user-defined `tol.tol`.
+"""
+(tol::ResidualTolerance)(y) = abs(y) < tol.tol
+
+"""
+    SolutionTolerance{FT} 
 
 A convergence criterion based on the absolute difference between consecutive iterates.
 The iteration stops when `|x_{n+1} - x_n| < tol`, where `tol` is the specified tolerance.
@@ -471,7 +630,7 @@ Evaluates solution tolerance, based on ``|x2-x1|``
 (tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
 
 """
-    RelativeSolutionTolerance{FT} <: AbstractTolerance{FT}
+    RelativeSolutionTolerance{FT} 
 
 A convergence criterion based on the relative difference between consecutive iterates.
 The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance.
@@ -504,10 +663,10 @@ end
 
 Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
 """
-(tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1)/x1) < tol.tol
+(tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1) / x1) < tol.tol
 
 """
-    RelativeOrAbsoluteSolutionTolerance{FT} <: AbstractTolerance{FT}
+    RelativeOrAbsoluteSolutionTolerance{FT} 
 
 A robust convergence criterion combining both relative and absolute tolerances.
 The iteration stops when either `|(x_{n+1} - x_n)/x_n| < rtol` OR `|x_{n+1} - x_n| < atol`.
@@ -542,12 +701,10 @@ Evaluates combined relative and absolute tolerance, based
 on ``|(x2-x1)/x1| || |x2-x1|``
 """
 (tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
-    abs((x2 - x1)/x1) < tol.rtol || abs(x2 - x1) < tol.atol
-
-# TODO: isapprox is slower on GPUs than the simpler checks above
+    abs((x2 - x1) / x1) < tol.rtol || abs(x2 - x1) < tol.atol
 
 """
-    find_zero(f, method, soltype=CompactSolution(), tol=nothing, maxiters=10_000)
+    find_zero(f, method, soltype=CompactSolution(), tol=nothing, maxiters=1_000)
 
 Find a root of the scalar function `f` using the specified numerical method.
 
@@ -558,18 +715,18 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
 ## Arguments
 - `f::Function`: The function for which to find a root. Should take a scalar input and return a scalar output.
 - `method::RootSolvingMethod`: The numerical method to use. Available methods:
-  - `SecantMethod`: Uses linear interpolation between two points (superlinear convergence)
-  - `RegulaFalsiMethod`: Bracketing method maintaining sign change (linear convergence, guaranteed)
-  - `NewtonsMethodAD`: Newton's method with automatic differentiation (quadratic convergence)
-  - `NewtonsMethod`: Newton's method with user-provided derivative (quadratic convergence)
-- `soltype::SolutionType`: Format of the returned solution (default: `CompactSolution()`):
-  - `CompactSolution`: Returns only root and convergence status (GPU-compatible)
-  - `VerboseSolution`: Returns detailed diagnostics and iteration history (CPU-only)
-- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: `SolutionTolerance(1e-3)`):
-  - `ResidualTolerance`: Based on `|f(x)|`
-  - `SolutionTolerance`: Based on `|x_{n+1} - x_n|`
-  - `RelativeSolutionTolerance`: Based on `|(x_{n+1} - x_n)/x_n|`
-  - `RelativeOrAbsoluteSolutionTolerance`: Combined relative and absolute tolerance
+    - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
+    - [`RegulaFalsiMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
+    - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
+    - [`NewtonsMethod`](@ref): Newton's method with user-provided derivative (quadratic convergence)
+- `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
+    - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
+    - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
+- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: [`SolutionTolerance(1e-3)`](@ref)):
+    - [`ResidualTolerance`](@ref): Based on `|f(x)|`
+    - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
+    - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
+    - [`RelativeOrAbsoluteSolutionTolerance`](@ref): Combined relative and absolute tolerance
 - `maxiters::Int`: Maximum number of iterations allowed (default: 10,000)
 
 ## Returns
@@ -616,12 +773,12 @@ You can broadcast `find_zero` over arrays of methods or initial guesses to solve
 ```julia
 using CUDA, RootSolvers
 x0 = CUDA.fill(1.0, 1000)  # 1000 initial guesses on the GPU
-method = SecantMethod(x0, x0 .+ 1)
+method = SecantMethod.(x0, x0 .+ 1)
 # f should be broadcastable over arrays
 sol = find_zero.(x -> x.^2 .- 2, method, CompactSolution())
 ```
 
-This is especially useful for large-scale or batched root-finding on GPUs. Only `CompactSolution` is GPU-compatible.
+This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
 
 ## Method Selection Guide
 - **SecantMethod**: Good general-purpose method, no derivatives needed
@@ -630,9 +787,9 @@ This is especially useful for large-scale or batched root-finding on GPUs. Only 
 - **NewtonsMethod**: Use when you can provide analytical derivatives efficiently
 
 ## See Also
-- `SecantMethod`, `RegulaFalsiMethod`, `NewtonsMethodAD`, `NewtonsMethod`
-- `CompactSolution`, `VerboseSolution`
-- `ResidualTolerance`, `SolutionTolerance`
+- [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
+- [`CompactSolution`](@ref), [`VerboseSolution`](@ref)
+- [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref)
 """
 function find_zero end
 
@@ -669,7 +826,11 @@ function default_tol(::Type{FT}) where {FT}
 end
 
 # Update rule for Regula Falsi method
-_regula_falsi_rule(x0, y0, x1, y1) = (x0 * y1 - x1 * y0) / (y1 - y0)
+_regula_falsi_rule(x0, y0, x1, y1) = ifelse(
+    abs(y1 - y0) < 100 * eps(y1),
+    x0 + (x1 - x0) / 2,
+    (x0 * y1 - x1 * y0) / (y1 - y0),
+)
 
 # Generic helper for bracketing methods.
 # This function takes an `update_rule` function as an argument, which calculates
@@ -684,7 +845,7 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
         y_history = init_history(soltype, FT)
         return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
     end
-    
+
     y0 = f(x0)
     y1 = f(x1)
     if y0 * y1 >= 0
@@ -693,44 +854,44 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
         y_history = init_history(soltype, y0)
         return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
     end
-    
+
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
-   
+
     lastside = 0
-    
+
     local x, y
     for i in 1:maxiters
         # The update_rule function computes the next guess
         x = update_rule(x0, y0, x1, y1)
         y = f(x)
-        
+
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
-        
-        if y * y0 < 0
-            if tol(x, x1, y)
-                return SolutionResults(soltype, x, true, y, i, x_history, y_history)
-            end
-            x1, y1 = x, y
-            # Stagnation fix for Regula Falsi
-            if lastside == +1
-                y0 /= 2
-            end
-            lastside = +1
-        else
-            if tol(x0, x, y)
-                return SolutionResults(soltype, x, true, y, i, x_history, y_history)
-            end
-            x0, y0 = x, y
-            # Stagnation fix for Regula Falsi
-            if lastside == -1
-                y1 /= 2
-            end
-            lastside = -1
+
+        # Check which side of the bracket the new point is on
+        is_neg = y * y0 < 0
+
+        # Check for convergence
+        converged = ifelse(is_neg, tol(x, x1, y), tol(x0, x, y))
+        if converged
+            return SolutionResults(soltype, x, true, y, i, x_history, y_history)
         end
+
+        # Stagnation fix for Regula Falsi (halving the function value y0 or y1 if an
+        # endpoint hasn't moved, mimicking the "Illinois" or "Anderson-Björck" modifications)
+        y0_updated = ifelse(is_neg, ifelse(lastside == +1, y0 / 2, y0), y)
+        y1_updated = ifelse(is_neg, y, ifelse(lastside == -1, y1 / 2, y1))
+
+        # Bracket update
+        x0 = ifelse(is_neg, x0, x)
+        x1 = ifelse(is_neg, x, x1)
+        y0 = y0_updated
+        y1 = y1_updated
+
+        lastside = ifelse(is_neg, +1, -1)
     end
-    
+
     return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
 end
 
@@ -771,27 +932,38 @@ function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 
     for i in 1:maxiters
         # Convergence check
-        if tol(a, b, fb) || fb == 0
-            return SolutionResults(soltype, b, true, fb, i, x_history, y_history)
+        if (tol(a, b, fb)) || (fb == 0)
+            return SolutionResults(
+                soltype,
+                b,
+                true,
+                fb,
+                i,
+                x_history,
+                y_history,
+            )
         end
 
         # On GPUs, `ifelse` is often more performant than `if-else` blocks
         # by avoiding branch divergence.
-        s = ifelse(fa != fc && fb != fc,
-                   # Inverse Quadratic Interpolation
-                   a * fb * fc / ((fa - fb) * (fa - fc)) +
-                   b * fa * fc / ((fb - fa) * (fb - fc)) +
-                   c * fa * fb / ((fc - fa) * (fc - fb)),
-                   # Secant Method
-                   b - fb * (b - a) / (fb - fa))
+        s = ifelse(
+            (fa != fc) & (fb != fc),
+            # Inverse Quadratic Interpolation
+            a * fb * fc / ((fa - fb) * (fa - fc)) +
+            b * fa * fc / ((fb - fa) * (fb - fc)) +
+            c * fa * fb / ((fc - fa) * (fc - fb)),
+            # Secant Method
+            b - fb * (b - a) / (fb - fa),
+        )
 
         # Check if interpolation result is acceptable
-        m = (3*a + b) / 4
-        s_is_between = ifelse(a < b, s > m && s < b, s < m && s > b)
-        
+        m = (3 * a + b) / 4
+        s_is_between = ifelse(a < b, (s > m) & (s < b), (s < m) & (s > b))
+
         # If step is not acceptable, fall back to bisection
-        use_bisection = !s_is_between || abs(s - b) >= abs(e / 2) || abs(e) < eps(FT)
-        
+        use_bisection =
+            (!s_is_between) || (abs(s - b) >= abs(e / 2)) || (abs(e) < eps(FT))
+
         s_new = ifelse(use_bisection, (a + b) / 2, s)
         d_new = s_new - b
         e_new = ifelse(use_bisection, d_new, d)
@@ -820,7 +992,15 @@ function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
         a, fa, b, fb = a_new_swap, fa_new_swap, b_new_swap, fb_new_swap
     end
 
-    return SolutionResults(soltype, b, false, fb, maxiters, x_history, y_history)
+    return SolutionResults(
+        soltype,
+        b,
+        false,
+        fb,
+        maxiters,
+        x_history,
+        y_history,
+    )
 end
 
 # Dedicated helper for the Secant method (an open, two-point method)
@@ -835,44 +1015,75 @@ function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 
     y0 = f(x0)
     y1 = f(x1)
-    
+
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
-    
+
     for i in 1:maxiters
         Δx = x1 - x0
         Δy = y1 - y0
-        
+
         if abs(Δy) <= 100 * eps(y1)
             # Exiting because the function is flat. This is a stall.
             # The method has only "converged" if the residual is already small.
             converged = abs(y1) < default_tol(FT).tol # Check for near-zero residual
-            return SolutionResults(soltype, x1, converged, y1, i, x_history, y_history)
+            return SolutionResults(
+                soltype,
+                x1,
+                converged,
+                y1,
+                i,
+                x_history,
+                y_history,
+            )
         end
-        
+
         # Update x0, y0 to the "previous" state for the next iteration
         # and for the tolerance check below.
         x0, y0 = x1, y1
-        
+
         # Update x1 in-place using the now-stored previous state in y0.
         x1 -= y0 * Δx / Δy
         y1 = f(x1)
-        
+
         push_history!(x_history, x1, soltype)
         push_history!(y_history, y1, soltype)
 
         # Check for convergence
-        if tol(x0, x1, y1) 
-            return SolutionResults(soltype, x1, true, y1, i, x_history, y_history)
+        if tol(x0, x1, y1)
+            return SolutionResults(
+                soltype,
+                x1,
+                true,
+                y1,
+                i,
+                x_history,
+                y_history,
+            )
         end
     end
-    
-    return SolutionResults(soltype, x1, false, y1, maxiters, x_history, y_history)
+
+    return SolutionResults(
+        soltype,
+        x1,
+        false,
+        y1,
+        maxiters,
+        x_history,
+        y_history,
+    )
 end
 
 
 # Helper: Main iteration loop for Newton methods
-function _find_zero_newton(f_value_and_deriv, f_value_only, x0, soltype, tol, maxiters)
+function _find_zero_newton(
+    f_value_and_deriv,
+    f_value_only,
+    x0,
+    soltype,
+    tol,
+    maxiters,
+)
     FT = typeof(x0)
     if !isfinite(x0)
         y = FT(Inf)
@@ -883,74 +1094,102 @@ function _find_zero_newton(f_value_and_deriv, f_value_only, x0, soltype, tol, ma
 
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
-    
-    # Log the initial guess in verbose mode
+
+    # Evaluate and log the initial state
+    y0 = f_value_only(x0)
     push_history!(x_history, x0, soltype)
-    push_history!(y_history, f_value_and_deriv, x0, soltype)
-  
-    c = FT(1e-4)   # Conservative Armijo constant for better convergence
+    push_history!(y_history, y0, soltype)
+
+    # Unified check on the initial guess before iterating.
+    # If the initial guess is already a solution, return immediately.
+    if tol(y0)
+        return SolutionResults(soltype, x0, true, y0, 0, x_history, y_history)
+    end
+
+    # Use `x` for the current iterate
+    x = x0
+
+    c = FT(1e-4)   # Conservative Armijo constant
     for i in 1:maxiters
-        # Perform function evaluation and derivative calculation simultaneously
-        y, y′ = f_value_and_deriv(x0)
+        y, y′ = f_value_and_deriv(x)
 
-        # Early convergence check on the residual
-        if abs(y) <= eps(typeof(x0))
-            return SolutionResults(soltype, x0, true, y, i, x_history, y_history)
-        end
-
-        # Fallback to secant method when derivative is too small or for high-multiplicity roots
-        if abs(y′) <= 100 * eps(FT) || (abs(y′) < eps(FT) * abs(y) && abs(y) > eps(FT))
-            x_pert = x0 + (iszero(x0) ? sqrt(eps(FT)) : x0 * sqrt(eps(FT)))
-            return _find_zero_secant(f_value_only, x0, x_pert, soltype, tol, maxiters - i)
+        # Fallback to secant method when derivative is too small
+        if abs(y′) <= FT(1e-5)
+            x_pert = x + (iszero(x) ? sqrt(eps(FT)) : x * sqrt(eps(FT)))
+            return _find_zero_secant(
+                f_value_only,
+                x,
+                x_pert,
+                soltype,
+                tol,
+                maxiters - i,
+            )
         end
 
         Δx = y / y′  # Full Newton step
-        
-        # --- Step Limiting for Robustness ---
-        # Prevents overflow with low-precision floats by capping the step size.
-        max_step = FT(20) * (abs(x0) + sqrt(eps(FT))) # Heuristic limit
-        Δx = sign(Δx) * min(abs(Δx), max_step)
-        # --- End of Step Limiting ---
 
-        α = one(FT)  # Initial step length (full step)
-        x1 = x0 - α * Δx
+        # --- Step Limiting for Robustness ---
+        max_step = FT(20) * (abs(x) + sqrt(eps(FT)))
+        Δx = sign(Δx) * min(abs(Δx), max_step)
 
         # --- Backtracking Line Search ---
+        α = one(FT)
+        x1 = x - α * Δx
         max_backtrack = 5
         j = 0
         y1 = f_value_only(x1)
-        # Backtrack until the Armijo condition is satisfied for root finding
-        # We want |f(x1)| ≤ |f(x0)| - c * α * |f(x0)|, which ensures sufficient decrease
-        # Also ensure we don't backtrack too much (α should stay reasonable)
-        while j < max_backtrack && (!isfinite(y1) || abs(y1) > abs(y) * (FT(1) - c * α) && α > eps(FT))
+        while j < max_backtrack && (
+            isfinite(y1) & (abs(y1) > abs(y) * (FT(1) - c * α)) & (α > eps(FT))
+        )
             α /= 2
-            x1 = x0 - α * Δx
+            x1 = x - α * Δx
             y1 = f_value_only(x1)
             j += 1
         end
-        # --- End of Backtracking ---
 
-        # If backtracking failed, we likely can't improve, so exit.
-        if !isfinite(y1) || abs(y1) >= abs(y)
-             return SolutionResults(soltype, x0, false, y, i, x_history, y_history)
+        if (!isfinite(y1)) || (abs(y1) >= abs(y))
+            return SolutionResults(
+                soltype,
+                x,
+                false,
+                y,
+                i,
+                x_history,
+                y_history,
+            )
         end
-        
+
         # Log the accepted new point
         push_history!(x_history, x1, soltype)
-        push_history!(y_history, y1, soltype)        
+        push_history!(y_history, y1, soltype)
 
-        # Check for convergence
-        if tol(x0, x1, y1)
-            return SolutionResults(soltype, x1, true, y1, i, x_history, y_history)
+        # Check for convergence using the standard 3-argument tolerance check
+        if tol(x, x1, y1)
+            return SolutionResults(
+                soltype,
+                x1,
+                true,
+                y1,
+                i,
+                x_history,
+                y_history,
+            )
         end
 
         # Update for next iteration
-        x0 = x1
+        x = x1
     end
-    
-    # If maxiters is reached, return the last computed state
-    y_final, _ = f_value_and_deriv(x0)
-    return SolutionResults(soltype, x0, false, y_final, maxiters, x_history, y_history)
+
+    y_final = f_value_only(x)
+    return SolutionResults(
+        soltype,
+        x,
+        false,
+        y_final,
+        maxiters,
+        x_history,
+        y_history,
+    )
 end
 
 # Main entry point: Dispatch to specific method
@@ -959,7 +1198,7 @@ function find_zero(
     method::RootSolvingMethod{FT},
     soltype::SolutionType = CompactSolution(),
     tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 10_000,
+    maxiters::Int = 1_000,
 ) where {FT <: FTypes, F <: Function}
     if tol === nothing
         tol = default_tol(FT)
@@ -973,7 +1212,7 @@ function Broadcast.broadcasted(
     method::RootSolvingMethod{FT},
     soltype::SolutionType,
     tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 10_000,
+    maxiters::Int = 1_000,
 ) where {FT <: FTypes, F}
     if tol === nothing
         tol = default_tol(FT)
@@ -1016,7 +1255,15 @@ function find_zero(
     tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT}
-    return _find_zero_bracketed(f, _regula_falsi_rule, x0, x1, soltype, tol, maxiters)
+    return _find_zero_bracketed(
+        f,
+        _regula_falsi_rule,
+        x0,
+        x1,
+        soltype,
+        tol,
+        maxiters,
+    )
 end
 
 method_args(method::BrentsMethod) = (method.x0, method.x1)
@@ -1041,7 +1288,14 @@ function find_zero(
     tol::AbstractTolerance,
     maxiters::Int,
 ) where {F <: Function, FT}
-    return _find_zero_newton((x) -> value_deriv(f, x), f, x0, soltype, tol, maxiters)
+    return _find_zero_newton(
+        Base.Fix1(value_deriv, f),
+        f,
+        x0,
+        soltype,
+        tol,
+        maxiters,
+    )
 end
 
 method_args(method::NewtonsMethod) = (method.x0,)
@@ -1097,7 +1351,7 @@ more efficient than computing them separately when both are needed (as in Newton
 ```julia
 f(x) = x^3 - 2x + 1
 val, deriv = value_deriv(f, 1.5)
-# val ≈ 2.875, deriv ≈ 4.75
+# val ≈ 1.375, deriv ≈ 4.75
 ```
 """
 function value_deriv(f, x::FT) where {FT}

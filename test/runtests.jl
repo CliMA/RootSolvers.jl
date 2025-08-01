@@ -23,13 +23,16 @@ function check_root_tolerance(roots, expected_root, problem, tol)
         if roots isa AbstractArray
             for (r, x0) in zip(roots, problem.x_init)
                 if abs(r - expected_root) ≥ _default_tol
-                    @info "Failing root" root=r expected=expected_root initial_guess=x0 tol=_default_tol
+                    @info "Failing root" problem = problem.name root = r expected =
+                        expected_root initial_guess = x0 tol = _default_tol
                 end
             end
             @test all(abs.(roots .- expected_root) .< _default_tol)
         else
             if abs(roots - expected_root) ≥ _default_tol
-                @info "Failing root" root=roots expected=expected_root initial_guess=problem.x_init tol=_default_tol
+                @info "Failing root" problem = problem.name root = roots expected =
+                    expected_root initial_guess = problem.x_init tol =
+                    _default_tol
             end
             @test abs(roots - expected_root) < _default_tol
         end
@@ -52,28 +55,40 @@ function check_root_tolerance(roots, expected_root, problem, tol)
         # Avoid division by zero
         if abs(expected_root) < eps(typeof(expected_root))
             if roots isa AbstractArray
-                @test all(abs.(roots .- expected_root)) .< 50*tol.tol
+                @test all(abs.(roots .- expected_root)) .< 50 * tol.tol
             else
                 @test abs(roots - expected_root) < tol_factor * tol.tol
             end
         else
             if roots isa AbstractArray
-                @test all(abs.((roots .- expected_root) ./ expected_root) .< tol_factor * tol.tol)
+                @test all(
+                    abs.((roots .- expected_root) ./ expected_root) .<
+                    tol_factor * tol.tol,
+                )
             else
-                @test abs((roots - expected_root) / expected_root) < tol_factor * tol.tol
+                @test abs((roots - expected_root) / expected_root) <
+                      tol_factor * tol.tol
             end
         end
     elseif tol isa RelativeOrAbsoluteSolutionTolerance
         # For combined tolerance, check both relative and absolute
         if roots isa AbstractArray
-            @test all((abs.((roots .- expected_root) ./ expected_root) .< tol_factor * tol.rtol) .| (abs.(roots .- expected_root) .< tol_factor * tol.atol))
+            @test all(
+                (
+                    abs.((roots .- expected_root) ./ expected_root) .<
+                    tol_factor * tol.rtol
+                ) .| (abs.(roots .- expected_root) .< tol_factor * tol.atol),
+            )
         else
-            @test (abs((roots - expected_root) / expected_root) < tol_factor * tol.rtol) || (abs(roots - expected_root) < tol_factor * tol.atol)
+            @test (
+                abs((roots - expected_root) / expected_root) <
+                tol_factor * tol.rtol
+            ) || (abs(roots - expected_root) < tol_factor * tol.atol)
         end
     else
         # Default tolerance check - use a reasonable default based on floating point precision
         FT = typeof(expected_root)
-        _default_tol = tol_factor * default_tol(FT).tol  
+        _default_tol = tol_factor * default_tol(FT).tol
         if roots isa AbstractArray
             @test all(abs.(roots .- expected_root) .< _default_tol)
         else
@@ -84,17 +99,13 @@ end
 
 # Helper function to get maxiters based on problem name
 function get_maxiters(problem_name)
-    if problem_name in ["high-multiplicity root", "steep exponential function", "trigonometric function"]
-        return 10_000
-    else
-        return 10_000
-    end
+    return 1_000
 end
 
 # Helper function to run solver and extract results
 function run_solver_test(f, method, sol_type, tol, maxiters, is_array)
     if is_array
-        sol = RootSolvers.find_zero.(Ref(f), method, sol_type, tol, maxiters)
+        sol = RootSolvers.find_zero.(f, method, sol_type, tol, maxiters)
         converged = map(x -> x.converged, sol)
         roots = map(x -> x.root, sol)
         return sol, converged, roots
@@ -113,31 +124,48 @@ end
             # Test both solution types: compact (GPU-friendly) and verbose (with history)
             for tol in get_tolerances(FT)
                 # Test all tolerance types for the given floating-point type
-                for method in get_methods(problem.x_init, problem.x_lower, problem.x_upper) 
+                for method in get_methods(
+                    problem.x_init,
+                    problem.x_lower,
+                    problem.x_upper,
+                )
                     # Test all applicable root-finding methods for this problem
-                    
+
                     # Choose function based on method type:
                     # - NewtonsMethod requires function that returns (f(x), f'(x))
                     # - Other methods use standard function f(x)
                     f = method isa NewtonsMethod ? problem.ff′ : problem.f
-                    
+
                     # Run solver test
                     is_array = problem.x_init isa AbstractArray
                     maxiters = get_maxiters(problem.name)
-                    sol, converged, roots = run_solver_test(f, method, sol_type, tol, maxiters, is_array)
-                    
+                    sol, converged, roots = run_solver_test(
+                        f,
+                        method,
+                        sol_type,
+                        tol,
+                        maxiters,
+                        is_array,
+                    )
+
                     # Validate results
                     @test isbits(method)                    # Ensure method is bitstype (GPU-compatible)
                     if is_array
                         @test all(converged)                # All should converge
                         @test eltype(roots) == eltype(problem.x_init)  # Type consistency
-                        test_verbose!(sol_type, sol, problem, tol, all(converged))  # Additional verbose checks
+                        test_verbose!(
+                            sol_type,
+                            sol,
+                            problem,
+                            tol,
+                            all(converged),
+                        )  # Additional verbose checks
                     else
                         @test converged                     # Should converge
                         @test roots isa FT                  # Type consistency
                         test_verbose!(sol_type, sol, problem, tol, converged)  # Additional verbose checks
                     end
-                    
+
                     # Check that roots are within a reasonable tolerance of the expected solution
                     check_root_tolerance(roots, problem.x̃, problem, tol)
                 end
@@ -149,7 +177,7 @@ end
 @testset "Convergence not reached" begin
     # Test that methods properly handle cases where convergence is not possible
     # This validates error handling and non-convergence detection
-    
+
     # Create a difficult problem that's unlikely to converge in few iterations
     # Use a problem that properly brackets a root for bracketing methods
     difficult_problem = RootSolvingProblem(
@@ -161,21 +189,28 @@ end
         0.0,   # Lower bound (f(0) = -1000)
         20.0,  # Upper bound (f(20) = 8000)
     )
-    
+
     for sol_type in [CompactSolution(), VerboseSolution()]
         for tol in get_tolerances(Float64)
-            for method in get_methods(difficult_problem.x_init, difficult_problem.x_lower, difficult_problem.x_upper)
+            for method in get_methods(
+                difficult_problem.x_init,
+                difficult_problem.x_lower,
+                difficult_problem.x_upper,
+            )
                 # Same function selection logic as above
-                f = method isa NewtonsMethod ? difficult_problem.ff′ : difficult_problem.f
-                
+                f =
+                    method isa NewtonsMethod ? difficult_problem.ff′ :
+                    difficult_problem.f
+
                 # Run solver test with very few iterations to force non-convergence
-                sol, converged, roots = run_solver_test(f, method, sol_type, tol, 2, false)
-                
+                sol, converged, roots =
+                    run_solver_test(f, method, sol_type, tol, 2, false)
+
                 # Validate that convergence is unlikely with very few iterations
                 @test isbits(method)
                 @test roots isa Float64
                 test_verbose!(sol_type, sol, difficult_problem, tol, converged)
-                
+
                 # Note: We don't strictly require non-convergence here because some methods
                 # might be very efficient and converge quickly. The important thing is that
                 # the method handles the case gracefully.
@@ -187,11 +222,15 @@ end
 @testset "Check small Δy" begin
     # Test edge case where function values are very close (small Δy)
     # This tests the robustness of the secant method implementation
-    
+
     ## Case 1: Δy is small and we converged
     # This tests the case where function values are nearly identical but we still converge
     # due to small Δx (solution is very close)
-    sol = find_zero(x -> x^3, SecantMethod{Float64}(1e-8, 1e-8 + 1e-24), VerboseSolution())
+    sol = find_zero(
+        x -> x^3,
+        SecantMethod{Float64}(1e-8, 1e-8 + 1e-24),
+        VerboseSolution(),
+    )
     @test sol.converged === true  # Δx is small
     y = sol.err
     @test abs(y) ≤ default_tol(Float64).tol  # y is small
@@ -200,7 +239,8 @@ end
     # This tests the case where function values are nearly identical but we don't converge
     # because the solution is not close (e.g., found two distinct roots)
     # Use a function where both endpoints have nearly identical function values but are far from any root
-    sol = find_zero(x -> x^2 + 1, SecantMethod{Float64}(-1, 1), VerboseSolution())
+    sol =
+        find_zero(x -> x^2 + 1, SecantMethod{Float64}(-1, 1), VerboseSolution())
     @test sol.converged === false  # Should not converge because no root exists in the interval
     y = sol.err
     @test abs(y) > default_tol(Float64).tol  # Verify y is not small

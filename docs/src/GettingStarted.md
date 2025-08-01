@@ -17,17 +17,15 @@ Pkg.add("RootSolvers")
 ---
 
 ## Quick Start Example
-```julia
+```@example howto
 using RootSolvers
-
 # Find the root of x^2 - 100^2 using the secant method
 sol = find_zero(x -> x^2 - 100^2, SecantMethod(0.0, 1000.0))
-
-if sol.converged
-    println("Root found: ", sol.root)
-else
-    println("Root not found")
-end
+sol
+```
+The numerical value of the root is contained in `sol.root`:
+```@example howto
+sol.root
 ```
 
 ---
@@ -36,66 +34,65 @@ end
 
 This guide shows the basic steps for solving a root-finding problem.
 
-### General Workflow (e.g., Secant Method)
+### General Workflow
 
 #### 1. Define Your Function
 Write your function as a Julia callable.
-```julia
+```@example howto
 f(x) = x^3 - 2x - 5
+nothing # hide
 ```
 
 #### 2. Choose a Root-Finding Method
 Pick a method and provide initial guesses. The type parameter (e.g., `Float64`) is often inferred automatically.
-```julia
+```@example howto
 # For SecantMethod, provide two initial guesses
 method = SecantMethod(1.0, 3.0)
-
-# For BrentsMethod, provide a bracketing interval
-method = BrentsMethod(-1.0, 3.0)
+nothing # hide
 ```
 
 #### 3. (Optional) Set Tolerance and Solution Type
 Customize the convergence criteria and the level of detail in the output.
-```julia
-# Stop when iterates are closer than 1e-8
-tol = SolutionTolerance(1e-8)
+```@example howto
+# Stop when iterates are closer than 1e-6
+tol = SolutionTolerance(1e-6)
 
 # Request detailed output for debugging
 soltype = VerboseSolution()
+nothing # hide
 ```
 
 #### 4. Call `find_zero`
 All arguments after `method` are optional.
-```julia
+```@example howto
 sol = find_zero(f, method, soltype, tol)
 ```
 
 #### 5. Interpret Results
 - `sol.converged`: `true` if a root was found.
 - `sol.root`: The root value.
-- `sol.err`, `sol.iter_performed`, `sol.root_history` (available with `VerboseSolution`).
+- `sol.err`, `sol.iter_performed`, `sol.root_history` (available with [`VerboseSolution`](@ref)).
 
 
 ### Specific Example: Newton's Method with a Provided Derivative
 
-When using `NewtonsMethod`, you must provide a function that returns both the value `f(x)` and its derivative `f'(x)` as a tuple. This avoids the overhead of automatic differentiation and is highly efficient if you can provide an analytical derivative.
+When using [`NewtonsMethod`](@ref), you must provide a function that returns both the value `f(x)` and its derivative `f'(x)` as a tuple. This avoids the overhead of automatic differentiation and is highly efficient if you can provide an analytical derivative.
 
 #### 1. Define Function and Derivative
-```julia
+```@example howto
 # This function finds the root of f(x) = x^2 - 4.
 # It returns the tuple (f(x), f'(x)).
 f_with_deriv(x) = (x^2 - 4, 2x)
+nothing # hide
 ```
 
 #### 2. Choose the Method and Call `find_zero`
-```julia
+```@example howto
 # Provide a single initial guess for Newton's method
 method = NewtonsMethod(1.0)
 
 # The function f_with_deriv is passed to find_zero
 sol = find_zero(f_with_deriv, method)
-
-println("Root found: ", sol.root) # Expected: 2.0
 ```
 
 ### Specific Example: Brent's Method for Robust Root Finding
@@ -103,21 +100,19 @@ println("Root found: ", sol.root) # Expected: 2.0
 Brent's method combines the bisection method, secant method, and inverse quadratic interpolation. It provides superlinear convergence while maintaining the robustness of bracketing methods.
 
 #### 1. Define Your Function
-```julia
+```@example howto
 # This function finds the root of f(x) = x^3 - 2.
 f(x) = x^3 - 2
+nothing # hide
 ```
 
 #### 2. Choose the Method and Call `find_zero`
-```julia
+```@example howto
 # Provide a bracketing interval where f(x0) and f(x1) have opposite signs
 method = BrentsMethod(-1.0, 2.0)  # f(-1) = -3, f(2) = 6
 
 # Solve the root-finding problem
 sol = find_zero(f, method)
-
-println("Root found: ", sol.root) # Expected: ≈ 1.259921
-println("Converged: ", sol.converged)
 ```
 
 ---
@@ -130,22 +125,23 @@ RootSolvers.jl is designed for high-performance computing, supporting broadcasti
 The package works seamlessly with any abstract type that supports broadcasting, making it well-suited for scientific domains like climate modeling.
 
 **Example: Solving over a custom field type**
-```julia
+```@example howto
 using RootSolvers
 
 # Example using regular arrays to represent a field grid
 x0 = rand(10, 10)  # A 10x10 field of initial guesses
-x1 = x0 .+ 1.0     # A second field of initial guesses
+x1 = x0 .+ 1       # A second field of initial guesses
 
 # Define a function that operates element-wise on the field
-f(x) = x.^2 .- 2.0
+f(x) = x.^2 .- 2
 
 # Solve the root-finding problem across the entire field
 method = SecantMethod(x0, x1)
 sol = find_zero.(f, method, CompactSolution()) # sol is an Array of structs
+```
 
-# Results
-# Use getproperty.() to extract the fields from each struct in the array
+Use `getproperty.()` to extract the fields from each struct in the array:
+```@example howto
 converged_field = getproperty.(sol, :converged)
 root_field = getproperty.(sol, :root)
 
@@ -157,7 +153,7 @@ println("Root field shape: ", size(root_field))
 You can achieve significant speedups by running large batches of problems on a GPU.
 
 **GPU Usage Tips:**
-- **Use `CompactSolution`:** Only `CompactSolution` is GPU-friendly. `VerboseSolution` is for CPU debugging only.
+- **Use[`CompactSolution`](@ref):** Only [`CompactSolution`](@ref) is GPU-friendly. [`VerboseSolution`](@ref) is for CPU debugging only.
 - **GPU-Compatible Function:** Ensure your function `f(x)` uses only GPU-supported operations.
 - **Minimize Data Transfer:** Keep initial guesses and results on the GPU.
 
@@ -173,7 +169,7 @@ x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
 f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using broadcasting
-method = SecantMethod(x0, x1)
+method = SecantMethod.(x0, x1)
 sol = find_zero.(f, method, CompactSolution())
 
 # Results are on the GPU
@@ -192,31 +188,35 @@ println("Root field shape: ", size(root_field))
 
 | Method | Requirements | Best For |
 | :--- | :--- | :--- |
-| `SecantMethod` | 2 initial guesses | No derivatives, **fast** convergence|
-| `RegulaFalsiMethod` | Bracketing interval | **Guaranteed** convergence |
-| `BrentsMethod` | Bracketing interval | **Superlinear** convergence, robust |
-| `NewtonsMethodAD` | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff, robust step control |
-| `NewtonsMethod` | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives, robust step control |
+| [`SecantMethod`](@ref) | 2 initial guesses | No derivatives, **fast** convergence|
+| [`RegulaFalsiMethod`](@ref) | Bracketing interval | **Guaranteed** convergence |
+| [`BrentsMethod`](@ref) | Bracketing interval | **Superlinear** convergence, robust |
+| [`NewtonsMethodAD`](@ref) | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff, robust step control |
+| [`NewtonsMethod`](@ref) | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives, robust step control |
 
 ### Available Tolerance Types
 
 | Tolerance Type | Criterion | Best For |
 | :--- | :--- | :--- |
-| `SolutionTolerance` | `abs(x₂ - x₁)` | When you want iterates to **stabilize** |
-| `ResidualTolerance` | `abs(f(x))` | When you want the function value near **zero** |
-| `RelativeSolutionTolerance` | `abs((x₂ - x₁)/x₁)` | When root magnitude **varies widely** |
-| `RelativeOrAbsolute...`| Relative or Absolute | **Robust** for both small and large roots |
+| [`SolutionTolerance`](@ref) | `abs(x₂ - x₁)` | When you want iterates to **stabilize** |
+| [`ResidualTolerance`](@ref) | `abs(f(x))` | When you want the function value near **zero** |
+| [`RelativeSolutionTolerance`](@ref) | `abs((x₂ - x₁)/x₁)` | When root magnitude **varies widely** |
+| [`RelativeOrAbsolute...`](@ref RelativeOrAbsoluteSolutionTolerance)| Relative or Absolute | **Robust** for both small and large roots |
 
 ### Available Solution Types
 
 | Solution Type | Features | Best For |
 | :--- | :--- | :--- |
-| `CompactSolution` | Minimal output, GPU-friendly | **High-performance**, GPU, memory efficiency |
-| `VerboseSolution` | Full diagnostics, iteration history | **Debugging**, analysis, CPU |
+| [`CompactSolution`](@ref) | Minimal output, GPU-friendly | **High-performance**, GPU, memory efficiency |
+| [`VerboseSolution`](@ref) | Full diagnostics, iteration history | **Debugging**, analysis, CPU |
 
 ---
 
 ## Troubleshooting
-- If not converging, try different initial guesses or a bracketing method (`BrentsMethod`).
-- Use `VerboseSolution()` to inspect the iteration history and diagnose issues.
+- If not converging, try different initial guesses or a bracketing method such as [`BrentsMethod`](@ref).
+- Use [`VerboseSolution()`](@ref) to inspect the iteration history and diagnose issues.
 - Adjust the tolerance for stricter or looser convergence criteria.
+
+## Extending RootSolvers.jl
+
+If you want to add custom root-finding methods, tolerance types, or solution formats, see the [Developer Documentation](DeveloperDocs.md) for detailed guidance on extending the package.
