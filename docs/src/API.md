@@ -30,6 +30,7 @@ The following structs are used to select the root-finding algorithm.
 |:--------------------|:------------------------------------|:--------------------------------|
 | [`SecantMethod`](@ref)      | 2 initial guesses                   | No derivatives, **fast** convergence|
 | [`RegulaFalsiMethod`](@ref) | Bracketing interval (sign change)   | **Guaranteed** convergence      |
+| [`BisectionMethod`](@ref)   | Bracketing interval (sign change)   | **Guaranteed** convergence, simple |
 | [`BrentsMethod`](@ref)      | Bracketing interval (sign change)   | **Superlinear** convergence, robust |
 | [`NewtonsMethodAD`](@ref)   | 1 initial guess, differentiable f   | **Fastest**, uses autodiff, robust step control |
 | [`NewtonsMethod`](@ref)     | 1 initial guess, f and f' provided  | **Analytical** derivatives, robust step control |
@@ -37,6 +38,7 @@ The following structs are used to select the root-finding algorithm.
 ```@docs
 SecantMethod
 RegulaFalsiMethod
+BisectionMethod
 BrentsMethod
 NewtonsMethodAD
 NewtonsMethod

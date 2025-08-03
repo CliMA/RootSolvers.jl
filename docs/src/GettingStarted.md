@@ -190,6 +190,7 @@ println("Root field shape: ", size(root_field))
 | :--- | :--- | :--- |
 | [`SecantMethod`](@ref) | 2 initial guesses | No derivatives, **fast** convergence|
 | [`RegulaFalsiMethod`](@ref) | Bracketing interval | **Guaranteed** convergence |
+| [`BisectionMethod`](@ref) | Bracketing interval | **Guaranteed** convergence, simple |
 | [`BrentsMethod`](@ref) | Bracketing interval | **Superlinear** convergence, robust |
 | [`NewtonsMethodAD`](@ref) | 1 initial guess, differentiable `f` | **Fastest**, uses autodiff, robust step control |
 | [`NewtonsMethod`](@ref) | 1 initial guess, `f` and `f'` provided | **Analytical** derivatives, robust step control |

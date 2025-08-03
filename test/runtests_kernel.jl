@@ -74,6 +74,7 @@ end
         for MethodType in (
             SecantMethodType(),
             RegulaFalsiMethodType(),
+            BisectionMethodType(),
             BrentsMethodType(),
             NewtonsMethodADType(),
             NewtonsMethodType(),

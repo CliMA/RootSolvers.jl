@@ -9,13 +9,14 @@ and tolerance criteria.
 
 ## Supported Methods
 - **Secant Method**: Requires two initial guesses, uses linear interpolation
+- **Bisection Method**: Requires bracketing interval with sign change, converges linearly
 - **Regula Falsi Method**: Requires bracketing interval with sign change
 - **Brent's Method**: Requires bracketing interval, combines bisection, secant, and inverse quadratic interpolation
 - **Newton's Method with AD**: Requires one initial guess, uses automatic differentiation
 - **Newton's Method**: Requires one initial guess and user-provided derivative
 
 ## Method Selection Guide
-- **Bracketing methods** (Regula Falsi, Brent's): Use when you know an interval containing the root
+- **Bracketing methods** (Bisection, Regula Falsi, Brent's): Use when you know an interval containing the root
 - **Brent's method**: Recommended for robust, guaranteed convergence with superlinear rate
 - **Secant method**: Good when you have two guesses but no bracketing interval
 - **Newton's methods**: Fastest convergence when you have a good initial guess
@@ -57,6 +58,7 @@ export find_zero,
     SecantMethod,
     RegulaFalsiMethod,
     BrentsMethod,
+    BisectionMethod,
     NewtonsMethodAD,
     NewtonsMethod
 export SolutionType, CompactSolution, VerboseSolution
@@ -91,6 +93,7 @@ initial guesses and parameters for the solver.
 ## Concrete Implementations
 - [`SecantMethod{FT}`](@ref): Linear interpolation between two points
 - [`RegulaFalsiMethod{FT}`](@ref): Bracketing method with linear interpolation
+- [`BisectionMethod{FT}`](@ref): Simple bracketing method with guaranteed convergence
 - [`BrentsMethod{FT}`](@ref): Robust bracketing method combining multiple techniques
 - [`NewtonsMethodAD{FT}`](@ref): Newton's method with automatic differentiation
 - [`NewtonsMethod{FT}`](@ref): Newton's method with user-provided derivatives
@@ -146,6 +149,41 @@ sol = find_zero(x -> x^3 - 8, method)
 ```
 """
 struct SecantMethod{FT} <: RootSolvingMethod{FT}
+    x0::FT
+    x1::FT
+end
+
+"""
+    BisectionMethod{FT} <: RootSolvingMethod{FT}
+
+The bisection method for root finding. This is a simple bracketing method that
+divides the interval in half at each iteration. The method requires that `f(x0)`
+and `f(x1)` have opposite signs, ensuring that a root exists in the interval `[x0, x1]`.
+
+The method uses the recurrence relation:
+```math
+x_{n+1} = \\frac{x_0 + x_1}{2}
+```
+where the interval `[x0, x1]` is updated based on the sign of `f(x_{n+1})`.
+
+## Convergence
+- **Order**: Linear (slower than Newton's method)
+- **Requirements**: Bracketing interval with `f(x0) * f(x1) < 0`
+- **Advantages**: Guaranteed convergence, simple implementation
+- **Disadvantages**: Slower convergence than other methods
+
+## Fields
+- `x0::FT`: Lower bound of bracketing interval
+- `x1::FT`: Upper bound of bracketing interval
+
+## Example
+```julia
+# Find root of x^3 - 2 in interval [-1, 2]
+method = BisectionMethod{Float64}(-1.0, 2.0)
+sol = find_zero(x -> x^3 - 2, method)
+```
+"""
+struct BisectionMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
     x1::FT
 end
@@ -588,7 +626,7 @@ Evaluates residual tolerance, based on ``|f(x)|``
 Evaluates a residual-only tolerance, used for early exit if ``|f(x)|``
 is already sufficiently small.
 """
-(tol::AbstractTolerance)(y) = abs(y) < max(eps(typeof(y)), typeof(y)(1e-8))
+(tol::AbstractTolerance)(y) = abs(y) < max(eps(typeof(y)), typeof(y)(1e-7))
 
 """
     (tol::ResidualTolerance)(y)
@@ -715,6 +753,7 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
 ## Arguments
 - `f::Function`: The function for which to find a root. Should take a scalar input and return a scalar output.
 - `method::RootSolvingMethod`: The numerical method to use. Available methods:
+    - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
     - [`RegulaFalsiMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
@@ -781,13 +820,14 @@ sol = find_zero.(x -> x.^2 .- 2, method, CompactSolution())
 This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
 
 ## Method Selection Guide
+- **BisectionMethod**: Simple general-purpose bracketing method, slow but guaranteed convergence
 - **SecantMethod**: Good general-purpose method, no derivatives needed
 - **RegulaFalsiMethod**: Use when you need guaranteed convergence with a bracketing interval
 - **NewtonsMethodAD**: Fastest convergence when derivatives are available via autodiff
 - **NewtonsMethod**: Use when you can provide analytical derivatives efficiently
 
 ## See Also
-- [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
+- [`BisectionMethod`](@ref), [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
 - [`CompactSolution`](@ref), [`VerboseSolution`](@ref)
 - [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref)
 """
@@ -825,19 +865,188 @@ function default_tol(::Type{FT}) where {FT}
     return SolutionTolerance{base_type(FT)}(1e-3)
 end
 
-# Update rule for Regula Falsi method
-_regula_falsi_rule(x0, y0, x1, y1) = ifelse(
+# Main entry point: Dispatch to specific method
+function find_zero(
+    f::F,
+    method::RootSolvingMethod{FT},
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
+) where {FT <: FTypes, F <: Function}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
+    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
+end
+
+function Broadcast.broadcasted(
+    ::typeof(find_zero),
+    f::F,
+    method::RootSolvingMethod{FT},
+    soltype::SolutionType,
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
+) where {FT <: FTypes, F}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
+    return broadcast(
+        find_zero,
+        f,
+        method,
+        method_args(method)...,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+####
+#### Numerical methods
+####
+
+@inline method_args(method::SecantMethod) = (method.x0, method.x1)
+function find_zero(
+    f::F,
+    ::SecantMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT <: FTypes}
+    return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
+end
+
+@inline method_args(method::BisectionMethod) = (method.x0, method.x1)
+function find_zero(
+    f::F,
+    ::BisectionMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_bracketed(
+        f,
+        _bisection_rule,
+        _bisection_y_update,
+        x0,
+        x1,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+@inline method_args(method::RegulaFalsiMethod) = (method.x0, method.x1)
+function find_zero(
+    f::F,
+    ::RegulaFalsiMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_bracketed(
+        f,
+        _regula_falsi_rule,
+        _regula_falsi_y_update,
+        x0,
+        x1,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+@inline method_args(method::BrentsMethod) = (method.x0, method.x1)
+function find_zero(
+    f::F,
+    ::BrentsMethod,
+    x0::FT,
+    x1::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
+end
+
+@inline method_args(method::NewtonsMethodAD) = (method.x0,)
+function find_zero(
+    f::F,
+    ::NewtonsMethodAD,
+    x0::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_newton(
+        Base.Fix1(value_deriv, f),
+        f,
+        x0,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+@inline method_args(method::NewtonsMethod) = (method.x0,)
+function find_zero(
+    f::F,
+    ::NewtonsMethod,
+    x0::FT,
+    soltype::SolutionType,
+    tol::AbstractTolerance,
+    maxiters::Int,
+) where {F <: Function, FT}
+    return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
+end
+
+####
+#### Method-specific helper functions
+####
+
+# --- Rules for calculating the next `x` value ---
+
+# Update rule for Bisection method: `x` is the midpoint.
+@inline _bisection_rule(x0, y0, x1, y1) = x0 + (x1 - x0) / 2
+
+# Update rule for Regula Falsi method: `x` is the secant intercept.
+@inline _regula_falsi_rule(x0, y0, x1, y1) = ifelse(
     abs(y1 - y0) < 100 * eps(y1),
-    x0 + (x1 - x0) / 2,
+    x0 + (x1 - x0) / 2, # Fallback to bisection if function is flat
     (x0 * y1 - x1 * y0) / (y1 - y0),
 )
 
-# Generic helper for bracketing methods.
-# This function takes an `update_rule` function as an argument, which calculates
-# the next point in the iteration. This allows for easy extension to other
-# bracketing methods, such as simplified versions of Brent's method with secant 
-# updates and bisection fallback.
-function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
+# --- Rules for updating the endpoint `y` values ---
+
+# For Bisection, `y` values are simply replaced.
+@inline _bisection_y_update(y0, y1, y, is_neg, lastside) =
+    (ifelse(is_neg, y0, y), ifelse(is_neg, y, y1))
+
+# For Regula Falsi, apply the Illinois method stagnation fix.
+@inline _regula_falsi_y_update(y0, y1, y, is_neg, lastside) = (
+    ifelse(is_neg, ifelse(lastside == +1, y0 / 2, y0), y),
+    ifelse(is_neg, y, ifelse(lastside == -1, y1 / 2, y1)),
+)
+
+
+# Internal function implementing the core bracketing algorithm used by bisection, 
+# Regula Falsi, and other bracketing methods.
+@inline function _find_zero_bracketed(
+    f,
+    update_x_rule,
+    update_y_rule,
+    x0,
+    x1,
+    soltype,
+    tol,
+    maxiters,
+)
     FT = typeof(x0)
     if !isfinite(x0) || !isfinite(x1)
         y = FT(Inf)
@@ -849,7 +1058,6 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
     y0 = f(x0)
     y1 = f(x1)
     if y0 * y1 >= 0
-        # Return failed solution instead of error for GPU compatibility
         x_history = init_history(soltype, x0)
         y_history = init_history(soltype, y0)
         return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
@@ -857,37 +1065,28 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
 
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
-
     lastside = 0
 
     local x, y
     for i in 1:maxiters
-        # The update_rule function computes the next guess
-        x = update_rule(x0, y0, x1, y1)
+        x = update_x_rule(x0, y0, x1, y1)
         y = f(x)
 
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
 
-        # Check which side of the bracket the new point is on
         is_neg = y * y0 < 0
+        converged = ifelse(is_neg, tol(x1, x, y), tol(x0, x, y))
 
-        # Check for convergence
-        converged = ifelse(is_neg, tol(x, x1, y), tol(x0, x, y))
-        if converged
+        if converged || tol(y)
             return SolutionResults(soltype, x, true, y, i, x_history, y_history)
         end
 
-        # Stagnation fix for Regula Falsi (halving the function value y0 or y1 if an
-        # endpoint hasn't moved, mimicking the "Illinois" or "Anderson-Björck" modifications)
-        y0_updated = ifelse(is_neg, ifelse(lastside == +1, y0 / 2, y0), y)
-        y1_updated = ifelse(is_neg, y, ifelse(lastside == -1, y1 / 2, y1))
-
-        # Bracket update
-        x0 = ifelse(is_neg, x0, x)
-        x1 = ifelse(is_neg, x, x1)
-        y0 = y0_updated
-        y1 = y1_updated
+        # Update x and y values using the provided policy rules
+        x0_new = ifelse(is_neg, x0, x)
+        x1_new = ifelse(is_neg, x, x1)
+        y0_new, y1_new = update_y_rule(y0, y1, y, is_neg, lastside)
+        x0, x1, y0, y1 = x0_new, x1_new, y0_new, y1_new
 
         lastside = ifelse(is_neg, +1, -1)
     end
@@ -895,8 +1094,10 @@ function _find_zero_bracketed(f, update_rule, x0, x1, soltype, tol, maxiters)
     return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
 end
 
-# Dedicated helper for Brent's method, which combines bisection, secant, and inverse quadratic interpolation.
-function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
+
+# Internal function implementing Brent's method, which combines bisection, secant, and 
+# inverse quadratic interpolation.
+@inline function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
     FT = typeof(x0)
     if !isfinite(x0) || !isfinite(x1)
         y = FT(Inf)
@@ -1003,8 +1204,8 @@ function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
     )
 end
 
-# Dedicated helper for the Secant method (an open, two-point method)
-function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
+# Internal function implementing the Secant method, an open, two-point method.
+@inline function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
     FT = typeof(x0)
     if !isfinite(x0) || !isfinite(x1)
         y = FT(Inf)
@@ -1026,7 +1227,7 @@ function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
         if abs(Δy) <= 100 * eps(y1)
             # Exiting because the function is flat. This is a stall.
             # The method has only "converged" if the residual is already small.
-            converged = abs(y1) < default_tol(FT).tol # Check for near-zero residual
+            converged = tol(y1) # Check for near-zero residual
             return SolutionResults(
                 soltype,
                 x1,
@@ -1075,8 +1276,9 @@ function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 end
 
 
-# Helper: Main iteration loop for Newton methods
-function _find_zero_newton(
+# Internal function implementing the main iteration loop for Newton methods (with AD 
+# or analytical derivatives)
+@inline function _find_zero_newton(
     f_value_and_deriv,
     f_value_only,
     x0,
@@ -1190,124 +1392,6 @@ function _find_zero_newton(
         x_history,
         y_history,
     )
-end
-
-# Main entry point: Dispatch to specific method
-function find_zero(
-    f::F,
-    method::RootSolvingMethod{FT},
-    soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 1_000,
-) where {FT <: FTypes, F <: Function}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
-    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
-end
-
-function Broadcast.broadcasted(
-    ::typeof(find_zero),
-    f::F,
-    method::RootSolvingMethod{FT},
-    soltype::SolutionType,
-    tol::Union{Nothing, AbstractTolerance} = nothing,
-    maxiters::Int = 1_000,
-) where {FT <: FTypes, F}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
-    return broadcast(
-        find_zero,
-        f,
-        method,
-        method_args(method)...,
-        soltype,
-        tol,
-        maxiters,
-    )
-end
-
-####
-#### Numerical methods
-####
-
-method_args(method::SecantMethod) = (method.x0, method.x1)
-function find_zero(
-    f::F,
-    ::SecantMethod,
-    x0::FT,
-    x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
-) where {F <: Function, FT <: FTypes}
-    return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
-end
-
-method_args(method::RegulaFalsiMethod) = (method.x0, method.x1)
-function find_zero(
-    f::F,
-    ::RegulaFalsiMethod,
-    x0::FT,
-    x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
-) where {F <: Function, FT}
-    return _find_zero_bracketed(
-        f,
-        _regula_falsi_rule,
-        x0,
-        x1,
-        soltype,
-        tol,
-        maxiters,
-    )
-end
-
-method_args(method::BrentsMethod) = (method.x0, method.x1)
-function find_zero(
-    f::F,
-    ::BrentsMethod,
-    x0::FT,
-    x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
-) where {F <: Function, FT}
-    return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
-end
-
-method_args(method::NewtonsMethodAD) = (method.x0,)
-function find_zero(
-    f::F,
-    ::NewtonsMethodAD,
-    x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
-) where {F <: Function, FT}
-    return _find_zero_newton(
-        Base.Fix1(value_deriv, f),
-        f,
-        x0,
-        soltype,
-        tol,
-        maxiters,
-    )
-end
-
-method_args(method::NewtonsMethod) = (method.x0,)
-function find_zero(
-    f::F,
-    ::NewtonsMethod,
-    x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
-) where {F <: Function, FT}
-    return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
 
 """

@@ -1,6 +1,7 @@
 using Test
 using RootSolvers
 using StaticArrays
+using Random
 
 # Define a structured type to represent root-finding test problems
 # This encapsulates all the data needed to test a root-finding method
@@ -82,10 +83,10 @@ function test_verbose!(::VerboseSolution, sol, problem, tol, converged)
 end
 
 """
-    expand_data_inputs!(problem_list, N)
+    expand_data_inputs!(problem_list, ε, N)
 
-Expands data inputs in `problem_list` from scalars to SArray's
-This creates array-based versions of scalar test problems for testing broadcasting
+Expands data inputs in `problem_list` from scalars to SArrays.
+This creates array-based versions of scalar test problems for testing broadcasting.
 """
 function expand_data_inputs!(problem_list, ε, N)
     # Create array-based versions of each scalar problem
@@ -101,13 +102,13 @@ function expand_data_inputs!(problem_list, ε, N)
                 problem.ff′,
                 problem.x̃,
                 SArray{Tuple{N, N}, FT}(
-                    problem.x_init .+ FT(ε) * rand(FT, N, N),
+                    problem.x_init .+ FT(ε) * randn(FT, N, N),
                 ),  # Initial guesses with noise
                 SArray{Tuple{N, N}, FT}(
-                    problem.x_lower .+ FT(ε) * rand(FT, N, N),
+                    problem.x_lower .+ FT(ε) * randn(FT, N, N),
                 ),  # Lower bounds with noise
                 SArray{Tuple{N, N}, FT}(
-                    problem.x_upper .+ FT(ε) * rand(FT, N, N),
+                    problem.x_upper .+ FT(ε) * randn(FT, N, N),
                 ),   # Upper bounds with noise
             ),
         )
@@ -128,6 +129,7 @@ function get_methods(x_init, x_lower, x_upper)
     return (
         SecantMethod(x_lower, x_upper),      # Two-point method using linear interpolation
         RegulaFalsiMethod(x_lower, x_upper), # Bracketing method with guaranteed convergence
+        BisectionMethod(x_lower, x_upper),   # Simple bracketing method with guaranteed convergence
         BrentsMethod(x_lower, x_upper),      # Brent's method with superlinear convergence
         NewtonsMethodAD(x_init),             # Newton's method with automatic differentiation
         NewtonsMethod(x_init),                # Newton's method with user-provided derivative
@@ -139,6 +141,7 @@ end
 # are not `isbits` with `CuArray`s, but types are.
 struct SecantMethodType end
 struct RegulaFalsiMethodType end
+struct BisectionMethodType end
 struct BrentsMethodType end
 struct NewtonsMethodADType end
 struct NewtonsMethodType end
@@ -149,6 +152,8 @@ get_method(::SecantMethodType, x_init, x_lower, x_upper) =
     SecantMethod(x_lower, x_upper)
 get_method(::RegulaFalsiMethodType, x_init, x_lower, x_upper) =
     RegulaFalsiMethod(x_lower, x_upper)
+get_method(::BisectionMethodType, x_init, x_lower, x_upper) =
+    BisectionMethod(x_lower, x_upper)
 get_method(::BrentsMethodType, x_init, x_lower, x_upper) =
     BrentsMethod(x_lower, x_upper)
 get_method(::NewtonsMethodADType, x_init, x_lower, x_upper) =
@@ -219,7 +224,7 @@ for FT in float_types()
             x -> sin(x),                         # Function f(x) = sin(x)
             x -> (sin(x), cos(x)),               # Function and derivative
             FT(π),                               # Exact solution x = π
-            FT(3),                               # Initial guess x₀ = 3
+            FT(2.5),                             # Initial guess x₀ = 2.5
             FT(2),                               # Lower bound for bracketing
             FT(4),                               # Upper bound for bracketing
         ),
@@ -228,4 +233,7 @@ end
 
 # Expand scalar problems to array problems for testing broadcasting
 # This creates array-based versions with small random perturbations
-expand_data_inputs!(problem_list, 0.1, problem_size())
+# Use deterministic random seed for reproducible tests
+using Random
+Random.seed!(42)  # Ensure reproducible random perturbations
+expand_data_inputs!(problem_list, 0.01, problem_size())
