@@ -1,13 +1,33 @@
 # RootSolvers.jl
 
-A simple GPU-capable root solver package.
+RootSolvers.jl is a Julia package for finding roots of nonlinear equations using robust, efficient, and GPU-capable numerical methods. It provides a simple, unified interface for a variety of classic root-finding algorithms, with flexible convergence criteria and solution reporting.
 
-## Usage
+- [Getting Started](GettingStarted.md): Installation, quick start, and how-to guide
+- [API Reference](API.md): Full documentation of all methods and types
 
-```@example
+## Quick Example
+See the [Getting Started](GettingStarted.md) page for more details and examples.
+
+Install stable release:
+```julia
+using Pkg
+Pkg.add("RootSolvers")
+```
+
+Find a root of a quadratic equation:
+```@example howto
 using RootSolvers
 
-sol = find_zero(x -> x^2 - 100^2,
-                SecantMethod{Float64}(0.0, 1000.0),
-                CompactSolution());
+# Find the root of x^2 - 100^2 using the secant method
+sol = find_zero(x -> x^2 - 100^2, SecantMethod(0.0, 1000.0))
 ```
+
+Or use Brent's method for robust bracketing
+```@example howto
+sol = find_zero(x -> x^2 - 100^2, BrentsMethod(-200.0, 0.0))
+```
+
+## Documentation
+- [Getting Started](GettingStarted.md)
+- [API Reference](API.md)
+- [Developer Documentation](DeveloperDocs.md)

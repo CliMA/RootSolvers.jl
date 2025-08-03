@@ -26,7 +26,6 @@ jobs:
       run: |
         julia --project=@. -e 'using Pkg; Pkg.instantiate()'
         julia --project=@. -e 'using Pkg; Pkg.test(coverage=true)'
-
     - name: Generate coverage file
       env:
         JULIA_PROJECT: "@."
@@ -40,4 +39,3 @@ jobs:
       with:
         token: ${{secrets.CODECOV_TOKEN}}
       if: success()
-

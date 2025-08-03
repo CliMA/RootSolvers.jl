@@ -2,16 +2,19 @@ using RootSolvers, Documenter
 
 pages = Any[
     "Home" => "index.md",
-    "Installation" => "Installation.md",
+    "Getting Started" => "GettingStarted.md",
     "API" => "API.md",
+    "Developer Documentation" => "DeveloperDocs.md",
 ]
 
-mathengine = MathJax(Dict(
-    :TeX => Dict(
-        :equationNumbers => Dict(:autoNumber => "AMS"),
-        :Macros => Dict(),
+mathengine = MathJax(
+    Dict(
+        :TeX => Dict(
+            :equationNumbers => Dict(:autoNumber => "AMS"),
+            :Macros => Dict(),
+        ),
     ),
-))
+)
 
 format = Documenter.HTML(
     prettyurls = get(ENV, "CI", nothing) == "true",

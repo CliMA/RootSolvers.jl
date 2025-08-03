@@ -18,17 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  test-os:
     timeout-minutes: 80
-    name: ci ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version:
-          - '1.7'
-          - '1.8'
-          - '1.9'
           - '1.10'
           - '1.11'
         os:
