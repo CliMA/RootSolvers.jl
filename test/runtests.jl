@@ -121,6 +121,36 @@ function run_solver_test(f, method, sol_type, tol, maxiters, is_array)
     end
 end
 
+function find_zero_wrapper(f, method, sol_type, tol, maxiters, is_array)
+    # Wrapper to handle both array and scalar cases
+    if is_array
+        find_zero.(f, method, sol_type, tol, maxiters)
+    else
+        find_zero(f, method, sol_type, tol, maxiters)
+    end
+    return
+end
+
+function test_allocations(
+    f::F,
+    method::M,
+    sol_type::S,
+    tol::T,
+    maxiters,
+    is_array,
+) where {F, M, S, T}
+    sol_type isa VerboseSolution && return  # VerboseSolution is expected to allocate
+    find_zero_wrapper(f, method, sol_type, tol, maxiters, is_array) # ensure function is compiled
+    @test (@allocated find_zero_wrapper(
+        f,
+        method,
+        sol_type,
+        tol,
+        maxiters,
+        is_array,
+    )) == 0
+end
+
 @testset "Convergence reached" begin
     # Test that all root-finding methods converge to the correct solution
     # This is the main test suite that validates the core functionality
@@ -174,6 +204,15 @@ end
 
                     # Check that roots are within a reasonable tolerance of the expected solution
                     check_root_tolerance(roots, problem.x̃, problem, tol)
+
+                    test_allocations(
+                        f,
+                        method,
+                        sol_type,
+                        tol,
+                        maxiters,
+                        is_array,
+                    )
                 end
             end
         end
@@ -216,6 +255,7 @@ end
                 @test isbits(method)
                 @test roots isa Float64
                 test_verbose!(sol_type, sol, difficult_problem, tol, converged)
+                test_allocations(f, method, sol_type, tol, 2, false)
 
                 # Note: We don't strictly require non-convergence here because some methods
                 # might be very efficient and converge quickly. The important thing is that

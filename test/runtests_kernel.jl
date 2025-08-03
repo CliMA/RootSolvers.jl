@@ -123,3 +123,45 @@ end
         end
     end
 end
+
+if !(ArrayType <: Array)
+    # If on cpu, the following test is redundant to the converegence reached test
+    @testset "Implicit CUDA kernel test" begin
+        array_type_problems = map(problem_list) do problem
+            RootSolvingProblem(
+                problem.name,
+                problem.f,
+                problem.ff′,
+                problem.x̃,
+                ArrayType(problem.x_init),
+                ArrayType(problem.x_lower),
+                ArrayType(problem.x_upper),
+            )
+        end
+        for problem in array_type_problems
+            FT = typeof(problem.x̃)
+            for tol in get_tolerances(FT)
+                for method in get_methods(
+                    problem.x_init,
+                    problem.x_lower,
+                    problem.x_upper,
+                )
+                    f =
+                        method isa NewtonsMethod || (
+                            method isa AbstractArray &&
+                            eltype(method) <: NewtonsMethod
+                        ) ? problem.ff′ : problem.f
+                    @show "aaaa"
+                    sol =
+                        RootSolvers.find_zero.(
+                            f,
+                            method,
+                            CompactSolution(),
+                            tol,
+                            2000,
+                        )
+                end
+            end
+        end
+    end
+end
