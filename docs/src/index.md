@@ -1,6 +1,6 @@
 # RootSolvers.jl
 
-RootSolvers.jl is a Julia package for finding roots of nonlinear equations using robust, efficient, and GPU-capable numerical methods. It provides a simple, unified interface for a variety of classic root-finding algorithms, with flexible convergence criteria and solution reporting.
+RootSolvers.jl is a Julia package for finding roots of nonlinear equations using robust, efficient, and GPU-capable numerical methods. It provides a simple, unified interface for a variety of classic root-finding algorithms, with flexible convergence criteria and solution reporting. The package supports dual numbers for automatic differentiation, making it suitable for integration into differentiable models and optimization problems.
 
 - [Getting Started](GettingStarted.md): Installation, quick start, and how-to guide
 - [API Reference](API.md): Full documentation of all methods and types

@@ -568,7 +568,6 @@ the callable interface `(tol)(x1, x2, y)` for convergence checking.
 ## Interface Requirements
 All concrete subtypes must implement:
 - `(tol)(x1, x2, y)`: Check convergence using three arguments (previous iterate, current iterate, function value)
-- `(tol)(y)`: Check convergence using only function value (for early exit)
 
 ## Example
 ```julia
@@ -577,9 +576,8 @@ struct MyTolerance{FT} <: AbstractTolerance{FT}
     threshold::FT
 end
 
-# Implement the interface
-(tol::MyTolerance)(x1, x2, y) = abs(x2 - x1) < tol.threshold
-(tol::MyTolerance)(y) = abs(y) < tol.threshold
+# Implement the required interface
+(tol::MyTolerance)(x1, x2, y) = abs(x2 - x1) < tol.threshold || abs(y) < eps(typeof(y))
 
 # Use with find_zero
 sol = find_zero(x -> x^2 - 4, SecantMethod(1.0, 3.0), CompactSolution(), MyTolerance(1e-6))
@@ -592,7 +590,8 @@ Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
     ResidualTolerance{FT} 
 
 A convergence criterion based on the absolute value of the residual (function value).
-The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance.
+The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance (limited to 
+the machine epsilon of the function value type).
 
 This tolerance is appropriate when you want to ensure that the function value is
 sufficiently close to zero, regardless of how close consecutive iterates are.
@@ -616,30 +615,19 @@ end
 """
     (tol::ResidualTolerance)(x1, x2, y)
 
-Evaluates residual tolerance, based on ``|f(x)|``
+Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the machine 
+epsilon of the function value type.
 """
-(tol::ResidualTolerance)(x1, x2, y) = abs(y) < tol.tol
+(tol::ResidualTolerance)(x1, x2, y) =
+    abs(y) < tol.tol || abs(y) < eps(typeof(y))
 
-"""
-    (tol::AbstractTolerance)(y)
-
-Evaluates a residual-only tolerance, used for early exit if ``|f(x)|``
-is already sufficiently small.
-"""
-(tol::AbstractTolerance)(y) = abs(y) < max(eps(typeof(y)), typeof(y)(1e-7))
-
-"""
-    (tol::ResidualTolerance)(y)
-
-Evaluates residual tolerance based on ``|f(x)|``, using the user-defined `tol.tol`.
-"""
-(tol::ResidualTolerance)(y) = abs(y) < tol.tol
 
 """
     SolutionTolerance{FT} 
 
 A convergence criterion based on the absolute difference between consecutive iterates.
 The iteration stops when `|x_{n+1} - x_n| < tol`, where `tol` is the specified tolerance.
+Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
 This tolerance is appropriate when you want to ensure that consecutive iterates are
 sufficiently close, indicating that the solution has stabilized.
@@ -665,13 +653,15 @@ end
 
 Evaluates solution tolerance, based on ``|x2-x1|``
 """
-(tol::SolutionTolerance)(x1, x2, y) = abs(x2 - x1) < tol.tol
+(tol::SolutionTolerance)(x1, x2, y) =
+    abs(x2 - x1) < tol.tol || abs(y) < eps(typeof(y))
 
 """
     RelativeSolutionTolerance{FT} 
 
 A convergence criterion based on the relative difference between consecutive iterates.
-The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance.
+The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
+Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
 This tolerance is appropriate when you want to convergence relative to the magnitude of the solution,
 which is useful when the root value might be very large or very small.
@@ -701,7 +691,8 @@ end
 
 Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
 """
-(tol::RelativeSolutionTolerance)(x1, x2, y) = abs((x2 - x1) / x1) < tol.tol
+(tol::RelativeSolutionTolerance)(x1, x2, y) =
+    abs((x2 - x1) / x1) < tol.tol || abs(y) < eps(typeof(y))
 
 """
     RelativeOrAbsoluteSolutionTolerance{FT} 
@@ -739,7 +730,9 @@ Evaluates combined relative and absolute tolerance, based
 on ``|(x2-x1)/x1| || |x2-x1|``
 """
 (tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
-    abs((x2 - x1) / x1) < tol.rtol || abs(x2 - x1) < tol.atol
+    abs((x2 - x1) / x1) < tol.rtol ||
+    abs(x2 - x1) < tol.atol ||
+    abs(y) < eps(typeof(y))
 
 """
     find_zero(f, method, soltype=CompactSolution(), tol=nothing, maxiters=1_000)
@@ -1075,14 +1068,13 @@ end
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
 
-        is_neg = y * y0 < 0
-        converged = ifelse(is_neg, tol(x1, x, y), tol(x0, x, y))
-
-        if converged || tol(y)
+        # Check for convergence first (including exact root)
+        if tol(x0, x1, y)
             return SolutionResults(soltype, x, true, y, i, x_history, y_history)
         end
 
         # Update x and y values using the provided policy rules
+        is_neg = y * y0 < 0
         x0_new = ifelse(is_neg, x0, x)
         x1_new = ifelse(is_neg, x, x1)
         y0_new, y1_new = update_y_rule(y0, y1, y, is_neg, lastside)
@@ -1227,7 +1219,7 @@ end
         if abs(Δy) <= 100 * eps(y1)
             # Exiting because the function is flat. This is a stall.
             # The method has only "converged" if the residual is already small.
-            converged = tol(y1) # Check for near-zero residual
+            converged = tol(x0, x1, y1) # Check for convergence
             return SolutionResults(
                 soltype,
                 x1,
@@ -1287,37 +1279,28 @@ end
     maxiters,
 )
     FT = typeof(x0)
-    if !isfinite(x0)
-        y = FT(Inf)
-        x_history = init_history(soltype, FT)
-        y_history = init_history(soltype, FT)
-        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
-    end
-
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
 
-    # Evaluate and log the initial state
-    y0 = f_value_only(x0)
-    push_history!(x_history, x0, soltype)
-    push_history!(y_history, y0, soltype)
-
-    # Unified check on the initial guess before iterating.
-    # If the initial guess is already a solution, return immediately.
-    if tol(y0)
-        return SolutionResults(soltype, x0, true, y0, 0, x_history, y_history)
+    if !isfinite(x0)
+        y = FT(Inf)
+        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
     end
 
-    # Use `x` for the current iterate
-    x = x0
+    # Log the initial state
+    push_history!(x_history, x0, soltype)
+    push_history!(y_history, f_value_and_deriv, x0, soltype)
 
-    c = FT(1e-4)   # Conservative Armijo constant
+    x = x0
+    c = FT(1e-4) # Conservative Armijo constant
+
     for i in 1:maxiters
         y, y′ = f_value_and_deriv(x)
 
         # Fallback to secant method when derivative is too small
         if abs(y′) <= FT(1e-5)
             x_pert = x + (iszero(x) ? sqrt(eps(FT)) : x * sqrt(eps(FT)))
+            # Note: History is lost on fallback for VerboseSolution 
             return _find_zero_secant(
                 f_value_only,
                 x,
@@ -1328,7 +1311,7 @@ end
             )
         end
 
-        Δx = y / y′  # Full Newton step
+        Δx = y / y′ # Full Newton step
 
         # --- Step Limiting for Robustness ---
         max_step = FT(20) * (abs(x) + sqrt(eps(FT)))
@@ -1336,20 +1319,24 @@ end
 
         # --- Backtracking Line Search ---
         α = one(FT)
-        x1 = x - α * Δx
+        x_new = x - α * Δx
+        y_new = f_value_only(x_new)
         max_backtrack = 5
         j = 0
-        y1 = f_value_only(x1)
         while j < max_backtrack && (
-            isfinite(y1) & (abs(y1) > abs(y) * (FT(1) - c * α)) & (α > eps(FT))
+            isfinite(y_new) &
+            (abs(y_new) > abs(y) * (FT(1) - c * α)) &
+            (α > eps(FT))
         )
             α /= 2
-            x1 = x - α * Δx
-            y1 = f_value_only(x1)
+            x_new = x - α * Δx
+            y_new = f_value_only(x_new)
             j += 1
         end
 
-        if (!isfinite(y1)) || (abs(y1) >= abs(y))
+        # If the line search failed to find a finite point,
+        # the original point `x` is the best we can do. Abort.
+        if !isfinite(y_new)
             return SolutionResults(
                 soltype,
                 x,
@@ -1362,16 +1349,16 @@ end
         end
 
         # Log the accepted new point
-        push_history!(x_history, x1, soltype)
-        push_history!(y_history, y1, soltype)
+        push_history!(x_history, x_new, soltype)
+        push_history!(y_history, y_new, soltype)
 
-        # Check for convergence using the standard 3-argument tolerance check
-        if tol(x, x1, y1)
+        # Check for convergence 
+        if tol(x, x_new, y_new)
             return SolutionResults(
                 soltype,
-                x1,
+                x_new,
                 true,
-                y1,
+                y_new,
                 i,
                 x_history,
                 y_history,
@@ -1379,7 +1366,7 @@ end
         end
 
         # Update for next iteration
-        x = x1
+        x = x_new
     end
 
     y_final = f_value_only(x)
@@ -1397,7 +1384,7 @@ end
 """
     method_args(method::RootSolvingMethod)
 
-Extract the intial guess(es) for a root-solving method for internal dispatch.
+Extract the initial guess(es) for a root-solving method for internal dispatch.
 
 This function is used internally to unpack method parameters for passing to the
 appropriate `find_zero` implementation.
@@ -1422,7 +1409,8 @@ function method_args end
 Compute both the function value and its derivative at point `x` using automatic differentiation.
 
 This function uses ForwardDiff.jl to simultaneously compute `f(x)` and `f'(x)`, which is
-more efficient than computing them separately when both are needed (as in Newton's method).
+more efficient than computing them separately when both are needed (as in Newton's method). It
+is used internally by `NewtonsMethodAD`.
 
 ## Arguments
 - `f`: Function to evaluate

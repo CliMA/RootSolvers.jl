@@ -15,7 +15,7 @@ using StaticArrays
 include("test_helper.jl")
 
 # Helper function to check if roots are within tolerance of expected solution    
-function check_root_tolerance(roots, expected_root, problem, tol)
+function check_root_tolerance(roots, expected_root, problem, method, tol)
     # For high-multiplicity roots, use more lenient tolerance since they're inherently difficult
     if problem.name in ("high-multiplicity root", "steep exponential function")
         tol_factor = 500  # Much more lenient for difficult functions
@@ -28,17 +28,18 @@ function check_root_tolerance(roots, expected_root, problem, tol)
         if roots isa AbstractArray
             for (r, x0) in zip(roots, problem.x_init)
                 if abs(r - expected_root) ≥ _default_tol
-                    @info "Failing root" problem = problem.name root = r expected =
-                        expected_root initial_guess = x0 tol = _default_tol error =
-                        abs(r - expected_root)
+                    @info "Failing root" problem = problem.name method = method root =
+                        r expected = expected_root initial_guess = x0 tol =
+                        _default_tol error = abs(r - expected_root)
                 end
             end
             @test all(abs.(roots .- expected_root) .< _default_tol)
         else
             if abs(roots - expected_root) ≥ _default_tol
-                @info "Failing root" problem = problem.name root = roots expected =
-                    expected_root initial_guess = problem.x_init tol =
-                    _default_tol error = abs(roots - expected_root)
+                @info "Failing root" problem = problem.name method = method root =
+                    roots expected = expected_root initial_guess =
+                    problem.x_init tol = _default_tol error =
+                    abs(roots - expected_root)
             end
             @test abs(roots - expected_root) < _default_tol
         end
@@ -173,7 +174,13 @@ end
                     end
 
                     # Check that roots are within a reasonable tolerance of the expected solution
-                    check_root_tolerance(roots, problem.x̃, problem, tol)
+                    check_root_tolerance(
+                        roots,
+                        problem.x̃,
+                        problem,
+                        method,
+                        tol,
+                    )
                 end
             end
         end

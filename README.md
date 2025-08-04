@@ -38,6 +38,7 @@ RootSolvers.jl provides robust, efficient numerical methods for finding roots of
 - **Multiple Root-Finding Methods**: Secant, Regula Falsi, Brent's method, Newton's method with automatic differentiation
 - **GPU Support**: Full GPU acceleration with CUDA.jl and other GPU array types
 - **Broadcasting**: Allows broadcasting over distributed arrays and custom field types
+- **Dual Number Support**: Compatible with automatic differentiation frameworks, allowing integration into differentiable models
 - **Flexible Convergence Criteria**: Multiple tolerance types for different applications
 - **High-Performance**: Optimized for large-scale parallel processing
 
