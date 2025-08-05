@@ -142,8 +142,7 @@ When extending RootSolvers.jl for GPU compatibility:
 
 The tests are located in the `test/` directory:
 
-- **`test/runtests.jl`**: Main test suite with comprehensive tests for all methods
-- **`test/runtests_kernel.jl`**: GPU kernel tests for CUDA compatibility
+- **`test/runtests.jl`**: Main test suite with comprehensive tests for all methods (including GPU tests)
 - **`test/test_helper.jl`**: Helper functions and test utilities
 - **`test/test_printing.jl`**: Tests for solution printing and formatting
 
@@ -157,10 +156,9 @@ The tests are located in the `test/` directory:
 - **Broadcasting**: Array and GPU compatibility
 - **Type stability**: Different floating-point types (Float32, Float64)
 
-#### `test/runtests_kernel.jl`
+#### GPU Tests (integrated in `test/runtests.jl`)
 - **GPU kernel tests**: CUDA array compatibility
 - **Broadcasting on GPU**: Parallel root-finding on GPU arrays
-- **Memory efficiency**: GPU memory usage and allocation
 
 #### `test/test_helper.jl`
 - **Test utilities**: Helper functions for generating test problems
@@ -185,11 +183,11 @@ julia --project=. test/runtests.jl
 
 #### Specific Test Files
 ```bash
-# Run the main test suite
+# Run the main test suite (CPU only)
 julia --project=. test/runtests.jl
 
-# Run GPU kernel tests alone (requires CUDA.jl)
-julia --project=. test/runtests_kernel.jl
+# Run tests with GPU arrays (requires CUDA.jl and compatible GPU)
+julia --project=. test/runtests.jl CuArray
 
 # Run printing tests
 julia --project=. test/test_printing.jl
@@ -197,8 +195,8 @@ julia --project=. test/test_printing.jl
 
 #### GPU Tests
 ```bash
-# Run GPU tests (requires CUDA.jl and compatible GPU)
-julia --project=. test/runtests_kernel.jl
+# Run all tests including GPU tests (only run when CUDA.jl and compatible GPU is available)
+julia --project=. test/runtests.jl CuArray
 ```
 
 ### Test Coverage
@@ -206,10 +204,10 @@ julia --project=. test/runtests_kernel.jl
 The test suite aims for comprehensive coverage:
 
 1. **Unit tests**: Test individual functions and methods
-2. **GPU tests**: Test CUDA compatibility and performance
-4. **Edge case tests**: Handle difficult convergence scenarios
-5. **Type stability tests**: Ensure GPU compatibility
-6. **Broadcasting tests**: Test array and GPU operations
+2. **GPU tests**: Test CUDA compatibility and performance (integrated in main test suite)
+3. **Edge case tests**: Handle difficult convergence scenarios
+4. **Type stability tests**: Ensure GPU compatibility
+5. **Broadcasting tests**: Test array and GPU operations
 
 ### Continuous Integration
 
