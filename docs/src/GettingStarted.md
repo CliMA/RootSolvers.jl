@@ -117,6 +117,35 @@ sol = find_zero(f, method)
 
 ---
 
+## Automatic Differentiation and Dual Number Support 🔄
+
+RootSolvers.jl is fully compatible with automatic differentiation frameworks, making it suitable for integration into differentiable models and optimization problems. The package supports dual numbers (from ForwardDiff.jl and other AD packages) as input arguments, allowing gradients to flow through root-finding computations. Dual number support works on GPU arrays when using compatible AD frameworks.
+
+### Using RootSolvers in Differentiable Models
+
+When your function `f(x)` accepts dual numbers, RootSolvers.jl can be used within larger differentiable computations:
+
+```@example
+using RootSolvers, ForwardDiff
+
+# Define a function that works with dual numbers
+f(x) = x^3 - 2x - 5
+
+# Create a wrapper that uses root finding
+function solve_and_evaluate(θ)
+    # θ is a parameter that affects the root-finding problem
+    g(x) = x^3 - θ * x - 5
+    sol = find_zero(g, SecantMethod(1.0, 3.0))
+    return sol.root
+end
+
+# Compute the derivative with respect to θ
+θ = 2.0
+deriv = ForwardDiff.derivative(solve_and_evaluate, θ)
+println("Derivative: ", deriv)
+```
+This enables integration, for example, with optimization, when an objective function may include a root finding problem. 
+
 ## High-Performance and GPU Computing 🚀
 
 RootSolvers.jl is designed for high-performance computing, supporting broadcasting over custom data structures and GPU acceleration. This makes it ideal for solving many problems in parallel.
@@ -240,6 +269,14 @@ println("Root field shape: ", size(root_field)) # Output "Root field shape: (100
 | :--- | :--- | :--- |
 | [`CompactSolution`](@ref) | Minimal output, GPU-friendly | **High-performance**, GPU, memory efficiency |
 | [`VerboseSolution`](@ref) | Full diagnostics, iteration history | **Debugging**, analysis, CPU |
+
+### Advanced Features
+
+| Feature | Description | Use Cases |
+| :--- | :--- | :--- |
+| **Dual Number Support** | Compatible with automatic differentiation | **Differentiable models**, optimization, gradient-based learning |
+| **GPU Acceleration** | Full CUDA.jl support with broadcasting | **Large-scale parallel processing**, batch computations |
+| **Custom Field Types** | Works with any broadcastable type | **Scientific computing**, climate modeling, custom data structures |
 
 ---
 
