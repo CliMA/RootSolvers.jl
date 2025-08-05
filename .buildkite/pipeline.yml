@@ -1,11 +1,12 @@
 agents:
   queue: new-central
-  slurm_mem: 3G
-  modules: climacommon/2024_10_09
-  slurm_time: '00:20:00'
+  slurm_mem: 8G
+  modules: climacommon/2025_03_18
+  slurm_time: '00:25:00'
 
 env:
   OPENBLAS_NUM_THREADS: 1
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
 
 steps:
   - label: "init environment :computer:"

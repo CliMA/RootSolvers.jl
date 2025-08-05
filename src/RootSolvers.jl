@@ -118,7 +118,6 @@ sol = find_zero(x -> x^2 - 4, MyCustomMethod{Float64}(1.0))
 ```
 """
 abstract type RootSolvingMethod{FT <: FTypes} end
-Base.broadcastable(method::RootSolvingMethod) = Ref(method)
 
 """
     SecantMethod{FT} <: RootSolvingMethod{FT}
@@ -868,32 +867,32 @@ end
 # Main entry point: Dispatch to specific method
 function find_zero(
     f::F,
-    method::RootSolvingMethod{FT},
+    method::M,
     soltype::SolutionType = CompactSolution(),
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
-) where {FT <: FTypes, F <: Function}
+) where {FT <: FTypes, F <: Function, M <: RootSolvingMethod{FT}}
     if tol === nothing
         tol = default_tol(FT)
     end
-    return find_zero(f, method, method_args(method)..., soltype, tol, maxiters)
+    return find_zero(f, M, method_args(method)..., soltype, tol, maxiters)
 end
 
 function Broadcast.broadcasted(
     ::typeof(find_zero),
     f::F,
-    method::RootSolvingMethod{FT},
-    soltype::SolutionType,
+    method::M,
+    soltype::SolutionType = CompactSolution(),
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
-) where {FT <: FTypes, F}
+) where {FT <: FTypes, F, M <: RootSolvingMethod{FT}}
     if tol === nothing
         tol = default_tol(FT)
     end
-    return broadcast(
+    return Broadcast.broadcasted(
         find_zero,
         f,
-        method,
+        M,
         method_args(method)...,
         soltype,
         tol,
@@ -908,26 +907,26 @@ end
 @inline method_args(method::SecantMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
-    ::SecantMethod,
+    ::Type{M},
     x0::FT,
     x1::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT <: FTypes}
+) where {F <: Function, FT <: FTypes, M <: SecantMethod}
     return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 end
 
 @inline method_args(method::BisectionMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
-    ::BisectionMethod,
+    ::Type{M},
     x0::FT,
     x1::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT}
+) where {F <: Function, FT, M <: BisectionMethod}
     return _find_zero_bracketed(
         f,
         _bisection_rule,
@@ -943,13 +942,13 @@ end
 @inline method_args(method::RegulaFalsiMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
-    ::RegulaFalsiMethod,
+    ::Type{M},
     x0::FT,
     x1::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT}
+) where {F <: Function, FT, M <: RegulaFalsiMethod}
     return _find_zero_bracketed(
         f,
         _regula_falsi_rule,
@@ -965,25 +964,25 @@ end
 @inline method_args(method::BrentsMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
-    ::BrentsMethod,
+    ::Type{M},
     x0::FT,
     x1::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT}
+) where {F <: Function, FT, M <: BrentsMethod}
     return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 end
 
 @inline method_args(method::NewtonsMethodAD) = (method.x0,)
 function find_zero(
     f::F,
-    ::NewtonsMethodAD,
+    ::Type{M},
     x0::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT}
+) where {F <: Function, FT, M <: NewtonsMethodAD}
     return _find_zero_newton(
         Base.Fix1(value_deriv, f),
         f,
@@ -997,12 +996,12 @@ end
 @inline method_args(method::NewtonsMethod) = (method.x0,)
 function find_zero(
     f::F,
-    ::NewtonsMethod,
+    ::Type{M},
     x0::FT,
     soltype::SolutionType,
     tol::AbstractTolerance,
     maxiters::Int,
-) where {F <: Function, FT}
+) where {F <: Function, FT, M <: NewtonsMethod}
     return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
 

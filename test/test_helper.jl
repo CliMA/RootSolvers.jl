@@ -90,6 +90,9 @@ This creates array-based versions of scalar test problems for testing broadcasti
 """
 function expand_data_inputs!(problem_list, ε, N)
     # Create array-based versions of each scalar problem
+    # Use ArrayType if it is not Array
+    to_array_type(x) =
+        ((@isdefined ArrayType) && !(ArrayType <: Array)) ? ArrayType(x) : x
     for problem in deepcopy(problem_list)
         FT = typeof(problem.x̃)
         # Add small random perturbations to create array problems
@@ -101,14 +104,20 @@ function expand_data_inputs!(problem_list, ε, N)
                 problem.f,
                 problem.ff′,
                 problem.x̃,
-                SArray{Tuple{N, N}, FT}(
-                    problem.x_init .+ FT(ε) * randn(FT, N, N),
+                to_array_type(
+                    SArray{Tuple{N, N}, FT}(
+                        problem.x_init .+ FT(ε) * randn(FT, N, N),
+                    ),
                 ),  # Initial guesses with noise
-                SArray{Tuple{N, N}, FT}(
-                    problem.x_lower .+ FT(ε) * randn(FT, N, N),
+                to_array_type(
+                    SArray{Tuple{N, N}, FT}(
+                        problem.x_lower .+ FT(ε) * randn(FT, N, N),
+                    ),
                 ),  # Lower bounds with noise
-                SArray{Tuple{N, N}, FT}(
-                    problem.x_upper .+ FT(ε) * randn(FT, N, N),
+                to_array_type(
+                    SArray{Tuple{N, N}, FT}(
+                        problem.x_upper .+ FT(ε) * randn(FT, N, N),
+                    ),
                 ),   # Upper bounds with noise
             ),
         )
@@ -124,8 +133,16 @@ end
 
 Numerical methods to test, given arguments from `RootSolvingProblem`.
 Returns a tuple of all applicable root-finding methods for the given problem.
+
+When `x_init`, `x_lower`, or `x_upper` is an array, it returns both methods
+of arrays and arrays of methods.
 """
 function get_methods(x_init, x_lower, x_upper)
+    # If inputs are not arrays, then broadcasted construction of the methods is equivalent
+    # to non broadcasted construction
+    arrays_of_methods =
+        any(x -> x isa AbstractArray, (x_init, x_lower, x_upper)) ?
+        get_arrays_of_methods(x_init, x_lower, x_upper) : ()
     return (
         SecantMethod(x_lower, x_upper),      # Two-point method using linear interpolation
         RegulaFalsiMethod(x_lower, x_upper), # Bracketing method with guaranteed convergence
@@ -133,33 +150,24 @@ function get_methods(x_init, x_lower, x_upper)
         BrentsMethod(x_lower, x_upper),      # Brent's method with superlinear convergence
         NewtonsMethodAD(x_init),             # Newton's method with automatic differentiation
         NewtonsMethod(x_init),                # Newton's method with user-provided derivative
+        arrays_of_methods...,
     )
 end
 
-# Convenience types for dispatching in kernel tests
-# These are used because instances of root-finding methods
-# are not `isbits` with `CuArray`s, but types are.
-struct SecantMethodType end
-struct RegulaFalsiMethodType end
-struct BisectionMethodType end
-struct BrentsMethodType end
-struct NewtonsMethodADType end
-struct NewtonsMethodType end
-
-# Convenience methods for unifying interfaces in the test suite:
-# These allow the same kernel code to work with different method types
-get_method(::SecantMethodType, x_init, x_lower, x_upper) =
-    SecantMethod(x_lower, x_upper)
-get_method(::RegulaFalsiMethodType, x_init, x_lower, x_upper) =
-    RegulaFalsiMethod(x_lower, x_upper)
-get_method(::BisectionMethodType, x_init, x_lower, x_upper) =
-    BisectionMethod(x_lower, x_upper)
-get_method(::BrentsMethodType, x_init, x_lower, x_upper) =
-    BrentsMethod(x_lower, x_upper)
-get_method(::NewtonsMethodADType, x_init, x_lower, x_upper) =
-    NewtonsMethodAD(x_init)
-get_method(::NewtonsMethodType, x_init, x_lower, x_upper) =
-    NewtonsMethod(x_init)
+function get_arrays_of_methods(
+    x_init::AbstractArray,
+    x_lower::AbstractArray,
+    x_upper::AbstractArray,
+)
+    (
+        SecantMethod.(x_lower, x_upper),
+        RegulaFalsiMethod.(x_lower, x_upper),
+        BisectionMethod.(x_lower, x_upper),
+        BrentsMethod.(x_lower, x_upper),
+        NewtonsMethodAD.(x_init),
+        NewtonsMethod.(x_init),
+    )
+end
 
 #####
 ##### Construct problem list
