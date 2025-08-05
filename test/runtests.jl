@@ -18,9 +18,9 @@ include("test_helper.jl")
 function check_root_tolerance(roots, expected_root, problem, method, tol)
     # For high-multiplicity roots, use more lenient tolerance since they're inherently difficult
     if problem.name in ("high-multiplicity root", "steep exponential function")
-        tol_factor = 500  # Much more lenient for difficult functions
+        tol_factor = 100  # Much more lenient for difficult functions
     else
-        tol_factor = 60
+        tol_factor = 10
     end
     FT = typeof(expected_root)
     if tol === nothing
