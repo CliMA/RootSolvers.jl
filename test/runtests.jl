@@ -18,8 +18,6 @@ include("test_helper.jl")
 
 # Helper function to check if roots are within tolerance of expected solution    
 function check_root_tolerance(roots, expected_root, problem, method, tol)
-# Helper function to check if roots are within tolerance of expected solution
-function check_root_tolerance(roots, expected_root, problem, tol)
     # For high-multiplicity roots, use more lenient tolerance since they're inherently difficult
     if problem.name in ("high-multiplicity root", "steep exponential function")
         tol_factor = 100  # Much more lenient for difficult functions
@@ -30,17 +28,12 @@ function check_root_tolerance(roots, expected_root, problem, tol)
     if tol === nothing
         _default_tol = tol_factor * default_tol(FT).tol
         if roots isa AbstractArray
-            for (r, x0) in zip(roots, problem.x_init)
-                if abs(r - expected_root) ≥ _default_tol
-                    @info "Failing root" problem = problem.name method = method root =
-                        r expected = expected_root initial_guess = x0 tol =
-                        _default_tol error = abs(r - expected_root)
             if ArrayType <: Array # If roots and x_init is on GPU, avoid scalar indexing
                 for (r, x0) in zip(roots, problem.x_init)
                     if abs(r - expected_root) ≥ _default_tol
-                        @info "Failing root" problem = problem.name root = r expected =
-                            expected_root initial_guess = x0 tol = _default_tol error =
-                            abs(r - expected_root)
+                        @info "Failing root" problem = problem.name method =
+                            method root = r expected = expected_root initial_guess =
+                            x0 tol = _default_tol error = abs(r - expected_root)
                     end
                 end
             end
@@ -74,7 +67,7 @@ function check_root_tolerance(roots, expected_root, problem, tol)
         # Avoid division by zero
         if abs(expected_root) < eps(typeof(expected_root))
             if roots isa AbstractArray
-                @test all(abs.(roots .- expected_root)) .< 50 * tol.tol
+                @test all(abs.(roots .- expected_root)) .< tol_factor * tol.tol
             else
                 @test abs(roots - expected_root) < tol_factor * tol.tol
             end
@@ -236,7 +229,6 @@ end
                         method,
                         tol,
                     )
-                    check_root_tolerance(roots, problem.x̃, problem, tol)
 
                     ArrayType <: Array && test_allocations(
                         f,

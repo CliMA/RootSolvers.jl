@@ -1286,15 +1286,16 @@ end
         return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
     end
 
-    # Log the initial state
-    push_history!(x_history, x0, soltype)
-    push_history!(y_history, f_value_and_deriv, x0, soltype)
-
+    # Initial state
     x = x0
-    c = FT(1e-4) # Conservative Armijo constant
+    y, y′ = f_value_and_deriv(x)
 
+    # Log the initial state
+    push_history!(x_history, x, soltype)
+    push_history!(y_history, y, soltype)
+
+    c = FT(1e-4) # Conservative Armijo constant
     for i in 1:maxiters
-        y, y′ = f_value_and_deriv(x)
 
         # Fallback to secant method when derivative is too small
         if abs(y′) <= FT(1e-5)
@@ -1366,6 +1367,7 @@ end
 
         # Update for next iteration
         x = x_new
+        y, y′ = f_value_and_deriv(x)
     end
 
     y_final = f_value_only(x)
