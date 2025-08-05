@@ -162,7 +162,7 @@ x0 = rand(10, 10)  # A 10x10 field of initial guesses
 x1 = x0 .+ 1       # A second field of initial guesses
 
 # Define a function that operates element-wise on the field
-f(x) = x.^2 .- 2
+f(x) = x^2 - 2
 
 # Solve the root-finding problem across the entire field
 method = SecantMethod(x0, x1)
@@ -180,13 +180,18 @@ println("Root field shape: ", size(root_field))
 
 ### GPU Acceleration for Batch Processing
 You can achieve significant speedups by running large batches of problems on a GPU.
+!!! note "GPU Backends"
+    The following examples use ['CUDA.jl`](https://cuda.juliagpu.org/stable/), but similar results\
+    can be achieved for different GPU backends with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/).
+
+
 
 **GPU Usage Tips:**
 - **Use[`CompactSolution`](@ref):** Only [`CompactSolution`](@ref) is GPU-friendly. [`VerboseSolution`](@ref) is for CPU debugging only.
 - **GPU-Compatible Function:** Ensure your function `f(x)` uses only GPU-supported operations.
 - **Minimize Data Transfer:** Keep initial guesses and results on the GPU.
 
-**Example: 1 Million problems on the GPU**
+**Broadcasting Example: 1 Million problems on the GPU**
 ```julia
 using RootSolvers, CUDA
 
@@ -198,15 +203,40 @@ x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
 f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using broadcasting
-method = SecantMethod.(x0, x1)
-sol = find_zero.(f, method, CompactSolution())
+method = SecantMethod(x0, x1) # method = SecantMethod.(x0, x1) is also supported
+sol = find_zero.(f, method, CompactSolution()) # broadcast launches kernel
 
-# Results are on the GPU
-converged_field = getproperty.(sol, :converged)
-root_field = getproperty.(sol, :root)
+# Results are on the GPU as an array of CompactSolutions
+converged_field = map(sol_i -> sol_i.converged, sol)
+root_field = map(sol_i -> sol_i.root, sol)
 
-println("All converged: ", all(converged_field))
-println("Root field shape: ", size(root_field))
+println("All converged: ", all(converged_field)) # Ouput: "All converged: true"
+println("Root field shape: ", size(root_field)) # Output "Root field shape: (1000, 1000)"
+```
+
+**Map Example: 1 Million problems on the GPU**
+```julia
+using RootSolvers, CUDA
+
+# Create GPU arrays for batch processing
+x0 = CUDA.fill(1.0f0, 1000, 1000)  # 1M initial guesses on GPU
+x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
+
+# Define GPU-compatible function
+f(x) = x^3 - x - 2
+
+# Solve all problems in parallel using map
+const METHOD = SecantMethod
+sol = map(x0, x1) do x0, x1 # map launches kernel
+    find_zero(f, METHOD(x0, x1), CompactSolution())
+end
+
+# Results are on the GPU as an array of CompactSolutions
+converged_field = map(sol_i -> sol_i.converged, sol)
+root_field = map(sol_i -> sol_i.root, sol)
+
+println("All converged: ", all(converged_field)) # Ouput: "All converged: true"
+println("Root field shape: ", size(root_field)) # Output "Root field shape: (1000, 1000)"
 ```
 
 ---

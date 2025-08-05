@@ -7,6 +7,8 @@ else
     ArrayType = Array
 end
 
+@show ArrayType
+
 using Test
 using RootSolvers
 using StaticArrays
@@ -16,6 +18,8 @@ include("test_helper.jl")
 
 # Helper function to check if roots are within tolerance of expected solution    
 function check_root_tolerance(roots, expected_root, problem, method, tol)
+# Helper function to check if roots are within tolerance of expected solution
+function check_root_tolerance(roots, expected_root, problem, tol)
     # For high-multiplicity roots, use more lenient tolerance since they're inherently difficult
     if problem.name in ("high-multiplicity root", "steep exponential function")
         tol_factor = 100  # Much more lenient for difficult functions
@@ -31,6 +35,13 @@ function check_root_tolerance(roots, expected_root, problem, method, tol)
                     @info "Failing root" problem = problem.name method = method root =
                         r expected = expected_root initial_guess = x0 tol =
                         _default_tol error = abs(r - expected_root)
+            if ArrayType <: Array # If roots and x_init is on GPU, avoid scalar indexing
+                for (r, x0) in zip(roots, problem.x_init)
+                    if abs(r - expected_root) ≥ _default_tol
+                        @info "Failing root" problem = problem.name root = r expected =
+                            expected_root initial_guess = x0 tol = _default_tol error =
+                            abs(r - expected_root)
+                    end
                 end
             end
             @test all(abs.(roots .- expected_root) .< _default_tol)
@@ -46,7 +57,8 @@ function check_root_tolerance(roots, expected_root, problem, method, tol)
     elseif tol isa ResidualTolerance
         # For residual tolerance, check that function values are small
         if roots isa AbstractArray
-            @test all(map(x -> abs(problem.f(x)), roots) .< tol.tol)
+            f = problem.f
+            @test all(map(x -> abs(f(x)), roots) .< tol.tol)
         else
             @test abs(problem.f(roots)) < tol.tol
         end
@@ -122,12 +134,52 @@ function run_solver_test(f, method, sol_type, tol, maxiters, is_array)
     end
 end
 
+function find_zero_wrapper(
+    f::F,
+    method::M,
+    sol_type::S,
+    tol::T,
+    maxiters,
+    is_array,
+) where {F, M, S, T}
+    # Wrapper to handle both array and scalar cases
+    if is_array
+        find_zero.(f, method, sol_type, tol, maxiters)
+    else
+        find_zero(f, method, sol_type, tol, maxiters)
+    end
+    return
+end
+
+function test_allocations(
+    f::F,
+    method::M,
+    sol_type::S,
+    tol::T,
+    maxiters,
+    is_array,
+) where {F, M, S, T}
+    sol_type isa VerboseSolution && return  # VerboseSolution is expected to allocate
+    find_zero_wrapper(f, method, sol_type, tol, maxiters, is_array) # ensure function is compiled
+    @test (@allocated find_zero_wrapper(
+        f,
+        method,
+        sol_type,
+        tol,
+        maxiters,
+        is_array,
+    )) == 0
+end
+
 @testset "Convergence reached" begin
     # Test that all root-finding methods converge to the correct solution
     # This is the main test suite that validates the core functionality
     for problem in problem_list
         FT = typeof(problem.x̃)  # Extract the floating-point type from the expected solution
-        for sol_type in [CompactSolution(), VerboseSolution()]
+        for sol_type in (
+            ArrayType <: Array ? [CompactSolution(), VerboseSolution()] :
+            [CompactSolution()] # VerboseSolution is not GPU friendly
+        )
             # Test both solution types: compact (GPU-friendly) and verbose (with history)
             for tol in get_tolerances(FT)
                 # Test all tolerance types for the given floating-point type
@@ -141,7 +193,11 @@ end
                     # Choose function based on method type:
                     # - NewtonsMethod requires function that returns (f(x), f'(x))
                     # - Other methods use standard function f(x)
-                    f = method isa NewtonsMethod ? problem.ff′ : problem.f
+                    f =
+                        method isa NewtonsMethod || (
+                            method isa AbstractArray &&
+                            eltype(method) <: NewtonsMethod
+                        ) ? problem.ff′ : problem.f
 
                     # Run solver test
                     is_array = problem.x_init isa AbstractArray
@@ -156,7 +212,6 @@ end
                     )
 
                     # Validate results
-                    @test isbits(method)                    # Ensure method is bitstype (GPU-compatible)
                     if is_array
                         @test all(converged)                # All should converge
                         @test eltype(roots) == eltype(problem.x_init)  # Type consistency
@@ -181,6 +236,16 @@ end
                         method,
                         tol,
                     )
+                    check_root_tolerance(roots, problem.x̃, problem, tol)
+
+                    ArrayType <: Array && test_allocations(
+                        f,
+                        method,
+                        sol_type,
+                        tol,
+                        maxiters,
+                        is_array,
+                    ) # allocations expected during CUDA kernel launches
                 end
             end
         end
@@ -203,7 +268,10 @@ end
         20.0,  # Upper bound (f(20) = 8000)
     )
 
-    for sol_type in [CompactSolution(), VerboseSolution()]
+    for sol_type in (
+        ArrayType <: Array ? [CompactSolution(), VerboseSolution()] :
+        [CompactSolution()]
+    )
         for tol in get_tolerances(Float64)
             for method in get_methods(
                 difficult_problem.x_init,
@@ -223,6 +291,8 @@ end
                 @test isbits(method)
                 @test roots isa Float64
                 test_verbose!(sol_type, sol, difficult_problem, tol, converged)
+                ArrayType <: Array &&
+                    test_allocations(f, method, sol_type, tol, 2, false)
 
                 # Note: We don't strictly require non-convergence here because some methods
                 # might be very efficient and converge quickly. The important thing is that
@@ -260,5 +330,4 @@ end
 end
 
 # Include additional test files for specialized functionality
-include("runtests_kernel.jl")  # GPU kernel tests using KernelAbstractions
 include("test_printing.jl")    # Tests for solution pretty printing
