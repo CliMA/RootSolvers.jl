@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/src/assets/logo.svg" alt="Thermodynamics.jl Logo" width="128" height="128">
+  <img src="docs/src/assets/logo.svg" alt="RootSolvers.jl Logo" width="128" height="128">
 </div>
 
 # RootSolvers.jl
