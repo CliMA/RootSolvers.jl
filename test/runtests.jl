@@ -12,6 +12,7 @@ end
 using Test
 using RootSolvers
 using StaticArrays
+using ForwardDiff
 
 # Include test helper functions that define test problems, methods, and tolerances
 include("test_helper.jl")
@@ -206,7 +207,7 @@ end
 
                     # Validate results
                     if is_array
-                        @test all(converged)                # All should converge
+                        @test all(converged) # All should converge
                         @test eltype(roots) == eltype(problem.x_init)  # Type consistency
                         test_verbose!(
                             sol_type,
@@ -216,8 +217,8 @@ end
                             all(converged),
                         )  # Additional verbose checks
                     else
-                        @test converged                     # Should converge
-                        @test roots isa FT                  # Type consistency
+                        @test converged # Should converge
+                        @test roots isa FT # Type consistency
                         test_verbose!(sol_type, sol, problem, tol, converged)  # Additional verbose checks
                     end
 
@@ -319,6 +320,59 @@ end
     @test sol.converged === false  # Should not converge because no root exists in the interval
     y = sol.err
     @test abs(y) > default_tol(Float64).tol  # Verify y is not small
+end
+
+@testset "Check invalid starting arguments" begin
+    for FT in (Float32, Float64)
+        # Test with x_init, x_lower, and x_upper as infinity
+        for method in get_methods(FT(Inf), FT(Inf), FT(Inf))
+            f = method isa NewtonsMethod ? x -> (identity, 1) : identity
+            sol = find_zero(f, method)
+            @test sol.converged === false
+        end
+        # Test when ff(x_init), (x_lower), or f(x_upper) evaluate to infinity
+        for method in get_methods(FT(2000), FT(2000), FT(2000))
+            f = method isa NewtonsMethod ? x -> (exp(x), exp(x)) : exp
+            sol = find_zero(f, method)
+            @test sol.converged === false
+        end
+        # Test when f(x_lower) and  f(x_upper) have same sign for methods that use bracketing
+        bracketing_methods = (RegulaFalsiMethod, BisectionMethod, BrentsMethod)
+        for method in bracketing_methods
+            sol = find_zero(identity, method(FT(-1), FT(-5)))
+            @test sol.converged === false  # Should not converge since f(x_lower) > 0 &  f(x_upper) > 0
+        end
+    end
+end
+
+@testset "Dual Number tests" begin
+    for FT in (Float32, Float64)
+        # θ  ̸∈ [-1, 1] to ensure valid inital bounds/guesses
+        for θ in FT.((-3, 3, -3 / 2, 5 / 2, 10))
+            method_types = (
+                SecantMethod,
+                RegulaFalsiMethod,
+                BisectionMethod,
+                BrentsMethod,
+                NewtonsMethodAD,
+                NewtonsMethod,
+            )
+            for MT in method_types
+                function f(θ)
+                    g(x) = x^2 - θ^2
+                    input_function = MT <: NewtonsMethod ? x -> (g(x), 2x) : g
+                    method =
+                        MT <: Union{NewtonsMethod, NewtonsMethodAD} ?
+                        MT(θ - 1) : MT(θ - 1, θ + 1)  # Create method with bounds
+                    sol = find_zero(input_function, method)
+                    return sol.root^2
+                end
+                deriv = ForwardDiff.derivative(f, θ)
+                @test abs(deriv - 2 * θ) <= default_tol(FT).tol
+            end
+        end
+
+    end
 end
 
 # Include additional test files for specialized functionality
