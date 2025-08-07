@@ -128,10 +128,7 @@ When your function `f(x)` accepts dual numbers, RootSolvers.jl can be used withi
 ```@example
 using RootSolvers, ForwardDiff
 
-# Define a function that works with dual numbers
-f(x) = x^3 - 2x - 5
-
-# Create a wrapper that uses root finding
+# Create a function that uses root finding
 function solve_and_evaluate(θ)
     # θ is a parameter that affects the root-finding problem
     g(x) = x^3 - θ * x - 5
