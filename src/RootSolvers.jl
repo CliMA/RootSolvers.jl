@@ -494,7 +494,7 @@ SolutionResults(soltype::CompactSolution, root, converged, args...) =
 
 function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
     color = sol.converged ? :green : :red
-    if sol isa get(io, :typeinfo, Any) <: CompactSolutionResults
+    if get(io, :compact, false)
         # compact printing within a vector or similar
         printstyled(io, sol.root; color)
     else
@@ -525,24 +525,6 @@ function push_history!(
     x::FT,
     ::CompactSolution,
 ) where {FT <: Real}
-    nothing
-end
-
-function push_history!(
-    history::Vector{FT},
-    f::F,
-    x::FT,
-    ::VerboseSolution,
-) where {FT <: Real, F <: Function}
-    y, _ = f(x)
-    push!(history, y)
-end
-function push_history!(
-    history::Nothing,
-    f::F,
-    x::FT,
-    ::CompactSolution,
-) where {FT <: Real, F <: Function}
     nothing
 end
 

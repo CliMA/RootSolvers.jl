@@ -18,6 +18,11 @@ using Printf
         @test startswith(sol_str, "CompactSolutionResults{Float64}")  # Check type header
         @test contains(sol_str, "converged")                          # Check convergence status
 
+
+        # test compact printing
+        sol_str = sprint(show, sol, context = :compact => true)
+        @test count(sol_str, "\n") == 0  # Ensure no newlines in compact mode
+
         # Test failed convergence case for CompactSolution
         # This validates display format when method doesn't converge
         sol = find_zero(
@@ -39,7 +44,7 @@ using Printf
         # This validates the detailed display format with iteration history
         sol = find_zero(
             x -> x^2 - 100^2,
-            SecantMethod{Float64}(0.0, 1000.0),
+            BrentsMethod{Float64}(-10.0, 50000.0),
             VerboseSolution(),
         )
         sol_str = sprint(show, sol)
@@ -51,6 +56,9 @@ using Printf
         @test contains(sol_str, "Error: $(sol.err)")                  # Check error value display
         @test contains(sol_str, "Iterations: $(length(sol.root_history)-1)")  # Check iteration count
         @test contains(sol_str, "History")                            # Check history section header
+        history_lines = split(sol_str, "History:\n")[2]
+        @test count("\n", history_lines) <= 21 # Check that long histories are truncated
+
 
         # Test failed convergence case for VerboseSolution
         # This validates detailed display format when method doesn't converge
