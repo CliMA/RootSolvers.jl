@@ -131,8 +131,8 @@ using RootSolvers, ForwardDiff
 # Create a function that uses root finding
 function solve_and_evaluate(θ)
     # θ is a parameter that affects the root-finding problem
-    g(x) = x^3 - θ * x - 5
-    sol = find_zero(g, SecantMethod(1.0, 3.0))
+    f(x) = x^3 - θ * x - 5
+    sol = find_zero(f, SecantMethod(1.0, 3.0))
     return sol.root
 end
 
@@ -141,7 +141,7 @@ end
 deriv = ForwardDiff.derivative(solve_and_evaluate, θ)
 println("Derivative: ", deriv)
 ```
-This enables integration, for example, with optimization, when an objective function may include a root finding problem. 
+This enables integration, for example, with derivative-based optimization algorithms, when an objective function may include a root finding problem. 
 
 ## High-Performance and GPU Computing 🚀
 
