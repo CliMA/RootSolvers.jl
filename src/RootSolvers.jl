@@ -730,17 +730,18 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
     - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
     - [`RegulaFalsiMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
+    - [`BrentsMethod`](@ref): Robust bracketing method combining bisection, secant, and inverse quadratic interpolation
     - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
     - [`NewtonsMethod`](@ref): Newton's method with user-provided derivative (quadratic convergence)
 - `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
     - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
     - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
-- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: [`SolutionTolerance(1e-3)`](@ref)):
+- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise):
     - [`ResidualTolerance`](@ref): Based on `|f(x)|`
     - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
     - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
     - [`RelativeOrAbsoluteSolutionTolerance`](@ref): Combined relative and absolute tolerance
-- `maxiters::Int`: Maximum number of iterations allowed (default: 10,000)
+- `maxiters::Int`: Maximum number of iterations allowed (default: 1,000)
 
 ## Returns
 - `AbstractSolutionResults`: Solution object containing the root and convergence information.
@@ -797,11 +798,12 @@ This is especially useful for large-scale or batched root-finding on GPUs. Only 
 - **BisectionMethod**: Simple general-purpose bracketing method, slow but guaranteed convergence
 - **SecantMethod**: Good general-purpose method, no derivatives needed
 - **RegulaFalsiMethod**: Use when you need guaranteed convergence with a bracketing interval
+- **BrentsMethod**: Robust bracketing method combining bisection, secant, and inverse quadratic interpolation
 - **NewtonsMethodAD**: Fastest convergence when derivatives are available via autodiff
 - **NewtonsMethod**: Use when you can provide analytical derivatives efficiently
 
 ## See Also
-- [`BisectionMethod`](@ref), [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
+- [`BisectionMethod`](@ref), [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
 - [`CompactSolution`](@ref), [`VerboseSolution`](@ref)
 - [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref)
 """
@@ -1032,9 +1034,19 @@ end
     y0 = f(x0)
     y1 = f(x1)
     if y0 * y1 >= 0
+        # Return failed solution instead of error for GPU compatibility.
+        # Pick the endpoint with the smaller residual as the best guess.
         x_history = init_history(soltype, x0)
         y_history = init_history(soltype, y0)
-        return SolutionResults(soltype, x0, false, y0, 0, x_history, y_history)
+        return SolutionResults(
+            soltype,
+            ifelse(abs(y0) < abs(y1), x0, x1),
+            false,
+            ifelse(abs(y0) < abs(y1), y0, y1),
+            0,
+            x_history,
+            y_history,
+        )
     end
 
     x_history = init_history(soltype, x0)
@@ -1083,10 +1095,19 @@ end
     fa, fb = f(a), f(b)
 
     if fa * fb >= 0
-        # Return failed solution instead of error for GPU compatibility
+        # Return failed solution instead of error for GPU compatibility.
+        # Pick the endpoint with the smaller residual as the best guess.
         x_history = init_history(soltype, a)
         y_history = init_history(soltype, fa)
-        return SolutionResults(soltype, a, false, fa, 0, x_history, y_history)
+        return SolutionResults(
+            soltype,
+            ifelse(abs(fa) < abs(fb), a, b),
+            false,
+            ifelse(abs(fa) < abs(fb), fa, fb),
+            0,
+            x_history,
+            y_history,
+        )
     end
 
     if abs(fa) < abs(fb)
