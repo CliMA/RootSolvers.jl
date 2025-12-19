@@ -68,7 +68,7 @@ Tolerance types define the convergence criteria for the solver.
 
 | Tolerance Type                        | Criterion                        | Best For                                 |
 |:--------------------------------------|:---------------------------------|:-----------------------------------------|
-| [`SolutionTolerance`](@ref)           )                   | `abs(x₂ - x₁)`                   | When you want iterates to **stabilize** |
+| [`SolutionTolerance`](@ref)                   | `abs(x₂ - x₁)`                   | When you want iterates to **stabilize** |
 | [`ResidualTolerance`](@ref)                   | `abs(f(x))`                      | When you want the function value near **zero** |
 | [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`              | When root magnitude **varies widely** |
 | [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute             | **Robust** for both small and large roots    |
