@@ -178,8 +178,7 @@ println("Root field shape: ", size(root_field))
 ### GPU Acceleration for Batch Processing
 You can achieve significant speedups by running large batches of problems on a GPU.
 !!! note "GPU Backends"
-    The following examples use ['CUDA.jl`](https://cuda.juliagpu.org/stable/), but similar results\
-    can be achieved for different GPU backends with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/).
+    The following examples use ['CUDA.jl`](https://cuda.juliagpu.org/stable/), but similar results can be achieved for different GPU backends with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/).
 
 
 
