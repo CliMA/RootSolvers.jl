@@ -11,9 +11,15 @@ and tolerance criteria.
 - **Secant Method**: Requires two initial guesses, uses linear interpolation
 - **Bisection Method**: Requires bracketing interval with sign change, converges linearly
 - **Regula Falsi Method**: Requires bracketing interval with sign change
-- **Brent's Method**: Requires bracketing interval, combines bisection, secant, and inverse quadratic interpolation
+- **Brent's Method**: Requires bracketing interval, combines bisection, secant, and
+  inverse quadratic interpolation
 - **Newton's Method with AD**: Requires one initial guess, uses automatic differentiation
 - **Newton's Method**: Requires one initial guess and user-provided derivative
+
+## GPU and Broadcasting
+For high-performance applications, especially on GPUs, use [`MethodSelector`](@ref) types
+(e.g., [`SecantSelector`](@ref), [`NewtonsSelector`](@ref)) to allow efficient broadcasting
+of the method across arrays of initial guesses.
 
 ## Method Selection Guide
 - **Bracketing methods** (Bisection, Regula Falsi, Brent's): Use when you know an interval containing the root
@@ -61,6 +67,11 @@ export find_zero,
     BisectionMethod,
     NewtonsMethodAD,
     NewtonsMethod
+
+export AbstractMethodSelector, MethodSelector
+export NewtonsSelector, NewtonsADSelector, SecantSelector, BrentsSelector,
+    RegulaFalsiSelector, BisectionSelector
+
 export SolutionType, CompactSolution, VerboseSolution
 export ResidualTolerance,
     SolutionTolerance,
@@ -221,8 +232,9 @@ end
 """
     BrentsMethod{FT} <: RootSolvingMethod{FT}
 
-Brent's method for root finding, which combines the bisection method, secant method, and inverse quadratic interpolation.
-This is a bracketing method that maintains the sign change property and provides superlinear convergence.
+Brent's method for root finding, which combines the bisection method, secant method, and
+inverse quadratic interpolation. This is a bracketing method that maintains the sign change
+property and provides superlinear convergence.
 
 The method requires that `f(x0)` and `f(x1)` have opposite signs, ensuring that
 a root exists in the interval `[x0, x1]`.
@@ -319,6 +331,51 @@ sol = find_zero(f_and_df, method)
 struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
 end
+
+"""
+    AbstractMethodSelector
+
+Lightweight singleton types for selecting root-solving methods.
+Designed for GPU-compatible dispatch in broadcasting scenarios where the method type
+needs to be effectively constant across the broadcast key.
+
+## Usage in Broadcasting
+
+```julia
+using RootSolvers
+
+# Select method once
+method = NewtonsSelector()
+
+# Broadcast over arrays with fixed method
+results = find_zero.(
+    f,
+    method,          # ← Broadcasts as scalar
+    array1,
+    array2,
+    ...
+)
+```
+
+GPU kernels can dispatch on these singleton types without dynamic Type dispatch.
+"""
+abstract type AbstractMethodSelector end
+Base.broadcastable(method::AbstractMethodSelector) = Ref(method)
+
+"""
+    MethodSelector{M} <: AbstractMethodSelector
+
+Parametric singleton type for selecting a root-solving method `M`.
+"""
+struct MethodSelector{M} <: AbstractMethodSelector end
+
+# Define aliases for convenience and backward compatibility
+const NewtonsSelector = MethodSelector{NewtonsMethod}
+const NewtonsADSelector = MethodSelector{NewtonsMethodAD}
+const SecantSelector = MethodSelector{SecantMethod}
+const BrentsSelector = MethodSelector{BrentsMethod}
+const RegulaFalsiSelector = MethodSelector{RegulaFalsiMethod}
+const BisectionSelector = MethodSelector{BisectionMethod}
 
 """
     SolutionType <: AbstractType
@@ -644,8 +701,8 @@ A convergence criterion based on the relative difference between consecutive ite
 The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
 Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
-This tolerance is appropriate when you want to convergence relative to the magnitude of the solution,
-which is useful when the root value might be very large or very small.
+This tolerance is appropriate when you want to convergence relative to the magnitude of the
+solution, which is useful when the root value might be very large or very small.
 
 ## Fields
 - `tol::FT`: Relative tolerance threshold
@@ -730,7 +787,8 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
     - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
     - [`RegulaFalsiMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
-    - [`BrentsMethod`](@ref): Robust bracketing method combining bisection, secant, and inverse quadratic interpolation
+    - [`BrentsMethod`](@ref): Robust bracketing method combining bisection, secant, and inverse
+      quadratic interpolation
     - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
     - [`NewtonsMethod`](@ref): Newton's method with user-provided derivative (quadratic convergence)
 - `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
@@ -782,14 +840,15 @@ sol = find_zero(x -> x^3 - 2x - 5, RegulaFalsiMethod{Float64}(2.0, 3.0))
 
 ## Batch and GPU Root-Finding (Broadcasting)
 
-You can broadcast `find_zero` over arrays of methods or initial guesses to solve many root-finding problems in parallel, including on the GPU:
+
+You can broadcast `find_zero` over arrays of initial guesses to solve many root-finding problems in parallel, including on the GPU.
+To broadcast efficiently while using the same method for all problems, use a [`MethodSelector`](@ref):
 
 ```julia
 using CUDA, RootSolvers
 x0 = CUDA.fill(1.0, 1000)  # 1000 initial guesses on the GPU
-method = SecantMethod.(x0, x0 .+ 1)
-# f should be broadcastable over arrays
-sol = find_zero.(x -> x.^2 .- 2, method, CompactSolution())
+# Use SecantSelector() to specify the method type for all elements
+sol = find_zero.(x -> x.^2 .- 2, SecantSelector(), x0, x0 .+ 1, CompactSolution())
 ```
 
 This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
@@ -875,6 +934,15 @@ function Broadcast.broadcasted(
         tol,
         maxiters,
     )
+end
+
+# Generic dispatch for MethodSelector
+@inline function find_zero(
+    f::F,
+    ::MethodSelector{M},
+    args...,
+) where {F <: Function, M}
+    return find_zero(f, M, args...)
 end
 
 ####

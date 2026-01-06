@@ -26,22 +26,38 @@ find_zero
 
 The following structs are used to select the root-finding algorithm.
 
-| Method              | Requirements                        | Best For                        |
-|:--------------------|:------------------------------------|:--------------------------------|
-| [`SecantMethod`](@ref)      | 2 initial guesses                   | No derivatives, **fast** convergence|
-| [`RegulaFalsiMethod`](@ref) | Bracketing interval (sign change)   | **Guaranteed** convergence      |
-| [`BisectionMethod`](@ref)   | Bracketing interval (sign change)   | **Guaranteed** convergence, simple |
-| [`BrentsMethod`](@ref)      | Bracketing interval (sign change)   | **Superlinear** convergence, robust |
-| [`NewtonsMethodAD`](@ref)   | 1 initial guess, differentiable f   | **Fastest**, uses autodiff, robust step control |
-| [`NewtonsMethod`](@ref)     | 1 initial guess, f and f' provided  | **Analytical** derivatives, robust step control |
+| Method                      | Requirements                        | Best For                                           |
+|:----------------------------|:------------------------------------|:---------------------------------------------------|
+| [`SecantMethod`](@ref)      | 2 initial guesses                   | No derivatives, **fast** convergence               |
+| [`RegulaFalsiMethod`](@ref) | Bracketing interval (sign change)   | **Guaranteed** convergence                         |
+| [`BisectionMethod`](@ref)   | Bracketing interval (sign change)   | **Guaranteed** convergence, simple                 |
+| [`BrentsMethod`](@ref)      | Bracketing interval (sign change)   | **Superlinear** convergence, robust                |
+| [`NewtonsMethodAD`](@ref)   | 1 initial guess, differentiable f   | **Automatic differentiation**, robust step control |
+| [`NewtonsMethod`](@ref)     | 1 initial guess, f and f' provided  | **Analytical derivatives**, robust step control    |
 
 ```@docs
 SecantMethod
 RegulaFalsiMethod
-BisectionMethod
+BisectionMethod 
 BrentsMethod
 NewtonsMethodAD
 NewtonsMethod
+```
+
+### Method Selectors (for Broadcasting)
+
+For high-performance applications, especially on GPUs, use `MethodSelector` types to allow efficient broadcasting.
+
+| Selector | Best For |
+|:---|:---|
+| [`SecantSelector`](@ref)    | Broadcasting `SecantMethod`                    |
+| [`BrentsSelector`](@ref)    | Broadcasting `BrentsMethod`                    |
+| [`NewtonsSelector`](@ref)   | Broadcasting `NewtonsMethod`                   |
+| ...                         | (and corresponding selectors for other methods)|
+
+```@docs
+AbstractMethodSelector
+MethodSelector
 ```
 
 ---
@@ -50,10 +66,10 @@ NewtonsMethod
 
 These types control the level of detail in the output returned by `find_zero`.
 
-| Solution Type      | Features                              | Best For                        |
-|:-------------------|:--------------------------------------|:--------------------------------|
-| [`CompactSolution`](@ref)  | Minimal output, GPU-friendly          | **High-performance**, GPU, memory efficiency |
-| [`VerboseSolution`](@ref)  | Full diagnostics, iteration history   | **Debugging**, analysis, CPU    |
+| Solution Type             | Features                            | Best For                                     |
+|:--------------------------|:------------------------------------|:---------------------------------------------|
+| [`CompactSolution`](@ref) | Minimal output, GPU-friendly        | **High-performance**, GPU, memory efficiency |
+| [`VerboseSolution`](@ref) | Full diagnostics, iteration history | **Debugging**, analysis, CPU                 |
 
 ```@docs
 CompactSolution
@@ -66,12 +82,12 @@ VerboseSolution
 
 Tolerance types define the convergence criteria for the solver.
 
-| Tolerance Type                        | Criterion                        | Best For                                 |
-|:--------------------------------------|:---------------------------------|:-----------------------------------------|
-| [`SolutionTolerance`](@ref)                   | `abs(x₂ - x₁)`                   | When you want iterates to **stabilize** |
-| [`ResidualTolerance`](@ref)                   | `abs(f(x))`                      | When you want the function value near **zero** |
-| [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`              | When root magnitude **varies widely** |
-| [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute             | **Robust** for both small and large roots    |
+| Tolerance Type                                | Criterion             | Best For                                     |
+|:----------------------------------------------|:----------------------|:---------------------------------------------|
+| [`SolutionTolerance`](@ref)                   | `abs(x₂ - x₁)`        | When you want iterates to **stabilize**      |
+| [`ResidualTolerance`](@ref)                   | `abs(f(x))`           | When you want the function value near **zero** |
+| [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`   | When root magnitude **varies widely**        |
+| [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute  | **Robust** for both small and large roots    |
 
 ```@docs
 AbstractTolerance

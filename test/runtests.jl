@@ -376,4 +376,5 @@ end
 end
 
 # Include additional test files for specialized functionality
+include("test_method_selector.jl") # Tests for method selector functionality
 include("test_printing.jl")    # Tests for solution pretty printing
