@@ -89,8 +89,6 @@ RelativeOrAbsoluteSolutionTolerance
 
 RootSolvers.jl is designed for high-performance computing applications and supports broadcasting to solve many problems in parallel. This is especially useful for GPU arrays or custom field types used in scientific modeling.
 
-The custom broadcasting rule unpacks initial guesses from the `method` struct while treating all other arguments as scalars. This enables a clean API for batch-solving.
-
 For more information about broadcasting, see the examples in the `find_zero` documentation.
 
 ---
