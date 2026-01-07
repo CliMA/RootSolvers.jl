@@ -955,10 +955,13 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT <: FTypes, M <: SecantMethod}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 end
 
@@ -968,10 +971,13 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BisectionMethod}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_bracketed(
         f,
         _bisection_rule,
@@ -990,10 +996,13 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: RegulaFalsiMethod}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_bracketed(
         f,
         _regula_falsi_rule,
@@ -1012,10 +1021,13 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BrentsMethod}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 end
 
@@ -1024,10 +1036,13 @@ function find_zero(
     f::F,
     ::Type{M},
     x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethodAD}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_newton(
         Base.Fix1(value_deriv, f),
         f,
@@ -1043,10 +1058,13 @@ function find_zero(
     f::F,
     ::Type{M},
     x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::Union{Nothing, AbstractTolerance} = nothing,
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethod}
+    if tol === nothing
+        tol = default_tol(FT)
+    end
     return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
 

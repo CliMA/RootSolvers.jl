@@ -92,29 +92,31 @@ using RootSolvers
         # Note: We must wrap the selector in Ref() or treat it as a scalar to broadcast correctly 
         # against the arrays x0 and x1
         selector = SecantSelector()
-        results = find_zero.(
-            f,
-            selector,
-            x0,
-            x1,
-            CompactSolution(),
-            SolutionTolerance(1e-4),
-            100,
-        )
+        results =
+            find_zero.(
+                f,
+                selector,
+                x0,
+                x1,
+                CompactSolution(),
+                SolutionTolerance(1e-4),
+                100,
+            )
 
         @test length(results) == N
         @test all(r -> abs(r.root - root_val) < 1e-4, results)
 
         # Mix of scalar and array args (Testing the selector passing specifically)
-        results = find_zero.(
-            f,
-            SecantSelector(),
-            x0,
-            2.0,
-            CompactSolution(),
-            SolutionTolerance(1e-4),
-            100,
-        )
+        results =
+            find_zero.(
+                f,
+                SecantSelector(),
+                x0,
+                2.0,
+                CompactSolution(),
+                SolutionTolerance(1e-4),
+                100,
+            )
         @test length(results) == N
         @test all(r -> abs(r.root - root_val) < 1e-4, results)
     end

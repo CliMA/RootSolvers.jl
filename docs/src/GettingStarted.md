@@ -248,9 +248,8 @@ x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
 f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using map
-const METHOD = SecantMethod
 sol = map(x0, x1) do x0, x1 # map launches kernel
-    find_zero(f, METHOD(x0, x1), CompactSolution())
+    find_zero(f, SecantSelector(), x0, x1, CompactSolution())
 end
 
 # Results are on the GPU as an array of CompactSolutions
