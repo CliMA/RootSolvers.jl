@@ -376,4 +376,6 @@ end
 end
 
 # Include additional test files for specialized functionality
+include("test_method_selector.jl") # Tests for method selector functionality
+include("verify_selector_defaults.jl") # Tests for method selector defaults
 include("test_printing.jl")    # Tests for solution pretty printing

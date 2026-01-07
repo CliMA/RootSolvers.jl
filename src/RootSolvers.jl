@@ -11,9 +11,14 @@ and tolerance criteria.
 - **Secant Method**: Requires two initial guesses, uses linear interpolation
 - **Bisection Method**: Requires bracketing interval with sign change, converges linearly
 - **Regula Falsi Method**: Requires bracketing interval with sign change
-- **Brent's Method**: Requires bracketing interval, combines bisection, secant, and inverse quadratic interpolation
+- **Brent's Method**: Requires bracketing interval, combines bisection, secant, and
+  inverse quadratic interpolation
 - **Newton's Method with AD**: Requires one initial guess, uses automatic differentiation
 - **Newton's Method**: Requires one initial guess and user-provided derivative
+
+## GPU and Broadcasting
+For high-performance applications such as GPU kernels, one can broadcast `find_zero` 
+efficiently by passing the method type directly (e.g., `SecantMethod`).
 
 ## Method Selection Guide
 - **Bracketing methods** (Bisection, Regula Falsi, Brent's): Use when you know an interval containing the root
@@ -61,6 +66,9 @@ export find_zero,
     BisectionMethod,
     NewtonsMethodAD,
     NewtonsMethod
+
+
+
 export SolutionType, CompactSolution, VerboseSolution
 export ResidualTolerance,
     SolutionTolerance,
@@ -221,8 +229,9 @@ end
 """
     BrentsMethod{FT} <: RootSolvingMethod{FT}
 
-Brent's method for root finding, which combines the bisection method, secant method, and inverse quadratic interpolation.
-This is a bracketing method that maintains the sign change property and provides superlinear convergence.
+Brent's method for root finding, which combines the bisection method, secant method, and
+inverse quadratic interpolation. This is a bracketing method that maintains the sign change
+property and provides superlinear convergence.
 
 The method requires that `f(x0)` and `f(x1)` have opposite signs, ensuring that
 a root exists in the interval `[x0, x1]`.
@@ -320,6 +329,9 @@ struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
 end
 
+
+
+
 """
     SolutionType <: AbstractType
 
@@ -403,6 +415,11 @@ struct VerboseSolution <: SolutionType end
 
 abstract type AbstractSolutionResults{Real} end
 
+"""
+    VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Results type for `VerboseSolution` containing detailed iteration history.
+"""
 struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -483,6 +500,11 @@ end
 """
 struct CompactSolution <: SolutionType end
 
+"""
+    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Results type for `CompactSolution` containing minimal output.
+"""
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -644,8 +666,8 @@ A convergence criterion based on the relative difference between consecutive ite
 The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
 Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
-This tolerance is appropriate when you want to convergence relative to the magnitude of the solution,
-which is useful when the root value might be very large or very small.
+This tolerance is appropriate when you want to ensure convergence relative to the magnitude of 
+the solution, which is useful when the root value might be very large or very small.
 
 ## Fields
 - `tol::FT`: Relative tolerance threshold
@@ -730,13 +752,14 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
     - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
     - [`RegulaFalsiMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
-    - [`BrentsMethod`](@ref): Robust bracketing method combining bisection, secant, and inverse quadratic interpolation
+    - [`BrentsMethod`](@ref): Robust bracketing method combining bisection, secant, and inverse
+      quadratic interpolation
     - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
     - [`NewtonsMethod`](@ref): Newton's method with user-provided derivative (quadratic convergence)
 - `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
     - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
     - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
-- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise):
+- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion. If `nothing` (default), uses [`SolutionTolerance(1e-4)`](@ref) for `Float64` or `1e-3` otherwise. Available tolerance types:
     - [`ResidualTolerance`](@ref): Based on `|f(x)|`
     - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
     - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
@@ -782,14 +805,15 @@ sol = find_zero(x -> x^3 - 2x - 5, RegulaFalsiMethod{Float64}(2.0, 3.0))
 
 ## Batch and GPU Root-Finding (Broadcasting)
 
-You can broadcast `find_zero` over arrays of methods or initial guesses to solve many root-finding problems in parallel, including on the GPU:
+
+You can broadcast `find_zero` over arrays of initial guesses to solve many root-finding problems in parallel, including on the GPU.
+To broadcast efficiently while using the same method for all problems, pass the method type:
 
 ```julia
 using CUDA, RootSolvers
 x0 = CUDA.fill(1.0, 1000)  # 1000 initial guesses on the GPU
-method = SecantMethod.(x0, x0 .+ 1)
-# f should be broadcastable over arrays
-sol = find_zero.(x -> x.^2 .- 2, method, CompactSolution())
+# Pass the method type (e.g. SecantMethod) directly
+sol = find_zero.(x -> x.^2 .- 2, SecantMethod, x0, x0 .+ 1, CompactSolution())
 ```
 
 This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
@@ -849,7 +873,7 @@ function find_zero(
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
 ) where {FT <: FTypes, F <: Function, M <: RootSolvingMethod{FT}}
-    if tol === nothing
+    if isnothing(tol)
         tol = default_tol(FT)
     end
     return find_zero(f, M, method_args(method)..., soltype, tol, maxiters)
@@ -863,7 +887,7 @@ function Broadcast.broadcasted(
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
 ) where {FT <: FTypes, F, M <: RootSolvingMethod{FT}}
-    if tol === nothing
+    if isnothing(tol)
         tol = default_tol(FT)
     end
     return Broadcast.broadcasted(
@@ -877,6 +901,54 @@ function Broadcast.broadcasted(
     )
 end
 
+"""
+    find_zero(f, method_type::Type{<:RootSolvingMethod}, args...)
+
+Find a root of function `f` using the specified `method_type`.
+
+This interface is particularly useful for broadcasting, allowing you to apply the same 
+method to many problems with different initialization values (e.g., on the GPU).
+
+# Arguments
+
+The required `args...` depend on the specific `method_type` chosen:
+
+**For Two-Point/Bracketing Methods** (`SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`):
+  `find_zero(f, method_type, x0, x1, [soltype, tol, maxiters])`
+  - `f`: Function to find the root of
+  - `method_type`: One of `SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`
+  - `x0`, `x1`: Initial guesses or bracket endpoints
+  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `maxiters` (optional): `Int` (default: 1_000)
+
+**For One-Point Methods** (`NewtonsMethod`, `NewtonsMethodAD`):
+  `find_zero(f, method_type, x0, [soltype, tol, maxiters])`
+  - `f`: Function to find the root of (must return `(val, deriv)` tuple for `NewtonsMethod`)
+  - `method_type`: One of `NewtonsMethod`, `NewtonsMethodAD`
+  - `x0`: Initial guess
+  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `maxiters` (optional): `Int` (default: 1_000)
+
+# Examples
+
+```julia
+using RootSolvers, CUDA
+
+# --- Two-Point Methods (Broadcast over x0 and x1) ---
+x0 = CUDA.fill(1.0f0, 100)
+x1 = CUDA.fill(1.1f0, 100)
+# find_zero(f, SecantMethod, x0, x1)
+sol_secant = find_zero.(x -> x^2 - 2, SecantMethod, x0, x1)
+
+# --- One-Point Methods (Broadcast over x0) ---
+x0_newton = CUDA.fill(1.0f0, 100)
+# find_zero(f, NewtonsMethodAD, x0)
+sol_newton = find_zero.(x -> x^3 - 27, NewtonsMethodAD, x0_newton)
+```
+"""
+
 ####
 #### Numerical methods
 ####
@@ -887,9 +959,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT <: FTypes, M <: SecantMethod}
     return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 end
@@ -900,9 +972,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BisectionMethod}
     return _find_zero_bracketed(
         f,
@@ -922,9 +994,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: RegulaFalsiMethod}
     return _find_zero_bracketed(
         f,
@@ -944,9 +1016,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     x1::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BrentsMethod}
     return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 end
@@ -956,9 +1028,9 @@ function find_zero(
     f::F,
     ::Type{M},
     x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethodAD}
     return _find_zero_newton(
         Base.Fix1(value_deriv, f),
@@ -975,9 +1047,9 @@ function find_zero(
     f::F,
     ::Type{M},
     x0::FT,
-    soltype::SolutionType,
-    tol::AbstractTolerance,
-    maxiters::Int,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethod}
     return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
