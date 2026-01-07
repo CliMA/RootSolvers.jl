@@ -1,5 +1,9 @@
 # Getting Started
 
+```@meta
+CurrentModule = RootSolvers
+```
+
 RootSolvers.jl is a Julia package for finding roots of nonlinear equations using robust, efficient, and GPU-capable numerical methods. It provides a simple, unified interface for a variety of classic root-finding algorithms, with flexible convergence criteria and solution reporting.
 
 ---
@@ -80,10 +84,6 @@ All arguments after `method` are optional.
 sol = find_zero(f, method, soltype, tol)
 ```
 
-```@example howto
-sol = find_zero(f, method, soltype, tol)
-```
-
 #### Step 5: Interpret Results
 
 - `sol.converged`: `true` if a root was found.
@@ -120,6 +120,7 @@ Brent's method combines the bisection method, secant method, and inverse quadrat
 #### Step 1: Define Your Function
 
 ```@example howto
+using RootSolvers
 # This function finds the root of f(x) = x^3 - 2.
 f(x) = x^3 - 2
 nothing # hide
@@ -224,8 +225,8 @@ x1 = CUDA.fill(2.0f0, 1000, 1000)  # Second initial guesses
 f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using broadcasting
-# Use MethodSelector to specify the method type for all elements efficiently
-sol = find_zero.(f, SecantSelector(), x0, x1, CompactSolution()) # broadcast launches kernel
+# Pass the method type directly for efficient dispatch
+sol = find_zero.(f, SecantMethod, x0, x1, CompactSolution()) # broadcast launches kernel
 
 # Results are on the GPU as an array of CompactSolutions
 converged_field = map(sol_i -> sol_i.converged, sol)
@@ -249,7 +250,7 @@ f(x) = x^3 - x - 2
 
 # Solve all problems in parallel using map
 sol = map(x0, x1) do x0, x1 # map launches kernel
-    find_zero(f, SecantSelector(), x0, x1, CompactSolution())
+    find_zero(f, SecantMethod, x0, x1, CompactSolution())
 end
 
 # Results are on the GPU as an array of CompactSolutions

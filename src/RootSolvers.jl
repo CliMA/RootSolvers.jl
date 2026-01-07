@@ -17,9 +17,8 @@ and tolerance criteria.
 - **Newton's Method**: Requires one initial guess and user-provided derivative
 
 ## GPU and Broadcasting
-For high-performance applications, especially on GPUs, use [`MethodSelector`](@ref) types
-(e.g., [`SecantSelector`](@ref), [`NewtonsSelector`](@ref)) to allow efficient broadcasting
-of the method across arrays of initial guesses.
+For high-performance applications such as GPU kernels, one can broadcast `find_zero` 
+efficiently by passing the method type directly (e.g., `SecantMethod`).
 
 ## Method Selection Guide
 - **Bracketing methods** (Bisection, Regula Falsi, Brent's): Use when you know an interval containing the root
@@ -68,9 +67,7 @@ export find_zero,
     NewtonsMethodAD,
     NewtonsMethod
 
-export AbstractMethodSelector, MethodSelector
-export NewtonsSelector, NewtonsADSelector, SecantSelector, BrentsSelector,
-    RegulaFalsiSelector, BisectionSelector
+
 
 export SolutionType, CompactSolution, VerboseSolution
 export ResidualTolerance,
@@ -332,50 +329,8 @@ struct NewtonsMethod{FT} <: RootSolvingMethod{FT}
     x0::FT
 end
 
-"""
-    AbstractMethodSelector
 
-Lightweight singleton types for selecting root-solving methods.
-Designed for GPU-compatible dispatch in broadcasting scenarios where the method type
-needs to be effectively constant across the broadcast key.
 
-## Usage in Broadcasting
-
-```julia
-using RootSolvers
-
-# Select method once
-method = NewtonsSelector()
-
-# Broadcast over arrays with fixed method
-results = find_zero.(
-    f,
-    method,          # ← Broadcasts as scalar
-    array1,
-    array2,
-    ...
-)
-```
-
-GPU kernels can dispatch on these singleton types without dynamic Type dispatch.
-"""
-abstract type AbstractMethodSelector end
-Base.broadcastable(method::AbstractMethodSelector) = Ref(method)
-
-"""
-    MethodSelector{M} <: AbstractMethodSelector
-
-Parametric singleton type for selecting a root-solving method `M`.
-"""
-struct MethodSelector{M} <: AbstractMethodSelector end
-
-# Define aliases for convenience and backward compatibility
-const NewtonsSelector = MethodSelector{NewtonsMethod}
-const NewtonsADSelector = MethodSelector{NewtonsMethodAD}
-const SecantSelector = MethodSelector{SecantMethod}
-const BrentsSelector = MethodSelector{BrentsMethod}
-const RegulaFalsiSelector = MethodSelector{RegulaFalsiMethod}
-const BisectionSelector = MethodSelector{BisectionMethod}
 
 """
     SolutionType <: AbstractType
@@ -460,6 +415,11 @@ struct VerboseSolution <: SolutionType end
 
 abstract type AbstractSolutionResults{Real} end
 
+"""
+    VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Results type for `VerboseSolution` containing detailed iteration history.
+"""
 struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -540,6 +500,11 @@ end
 """
 struct CompactSolution <: SolutionType end
 
+"""
+    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+
+Results type for `CompactSolution` containing minimal output.
+"""
 struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
@@ -701,8 +666,8 @@ A convergence criterion based on the relative difference between consecutive ite
 The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
 Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
-This tolerance is appropriate when you want to convergence relative to the magnitude of the
-solution, which is useful when the root value might be very large or very small.
+This tolerance is appropriate when you want to ensure convergence relative to the magnitude of 
+the solution, which is useful when the root value might be very large or very small.
 
 ## Fields
 - `tol::FT`: Relative tolerance threshold
@@ -794,7 +759,7 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
 - `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
     - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
     - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
-- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise):
+- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion. If `nothing` (default), uses [`SolutionTolerance(1e-4)`](@ref) for `Float64` or `1e-3` otherwise. Available tolerance types:
     - [`ResidualTolerance`](@ref): Based on `|f(x)|`
     - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
     - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
@@ -842,13 +807,13 @@ sol = find_zero(x -> x^3 - 2x - 5, RegulaFalsiMethod{Float64}(2.0, 3.0))
 
 
 You can broadcast `find_zero` over arrays of initial guesses to solve many root-finding problems in parallel, including on the GPU.
-To broadcast efficiently while using the same method for all problems, use a [`MethodSelector`](@ref):
+To broadcast efficiently while using the same method for all problems, pass the method type:
 
 ```julia
 using CUDA, RootSolvers
 x0 = CUDA.fill(1.0, 1000)  # 1000 initial guesses on the GPU
-# Use SecantSelector() to specify the method type for all elements
-sol = find_zero.(x -> x.^2 .- 2, SecantSelector(), x0, x0 .+ 1, CompactSolution())
+# Pass the method type (e.g. SecantMethod) directly
+sol = find_zero.(x -> x.^2 .- 2, SecantMethod, x0, x0 .+ 1, CompactSolution())
 ```
 
 This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
@@ -908,7 +873,7 @@ function find_zero(
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
 ) where {FT <: FTypes, F <: Function, M <: RootSolvingMethod{FT}}
-    if tol === nothing
+    if isnothing(tol)
         tol = default_tol(FT)
     end
     return find_zero(f, M, method_args(method)..., soltype, tol, maxiters)
@@ -922,7 +887,7 @@ function Broadcast.broadcasted(
     tol::Union{Nothing, AbstractTolerance} = nothing,
     maxiters::Int = 1_000,
 ) where {FT <: FTypes, F, M <: RootSolvingMethod{FT}}
-    if tol === nothing
+    if isnothing(tol)
         tol = default_tol(FT)
     end
     return Broadcast.broadcasted(
@@ -936,14 +901,53 @@ function Broadcast.broadcasted(
     )
 end
 
-# Generic dispatch for MethodSelector
-@inline function find_zero(
-    f::F,
-    ::MethodSelector{M},
-    args...,
-) where {F <: Function, M}
-    return find_zero(f, M, args...)
-end
+"""
+    find_zero(f, method_type::Type{<:RootSolvingMethod}, args...)
+
+Find a root of function `f` using the specified `method_type`.
+
+This interface is particularly useful for broadcasting, allowing you to apply the same 
+method to many problems with different initialization values (e.g., on the GPU).
+
+# Arguments
+
+The required `args...` depend on the specific `method_type` chosen:
+
+**For Two-Point/Bracketing Methods** (`SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`):
+  `find_zero(f, method_type, x0, x1, [soltype, tol, maxiters])`
+  - `f`: Function to find the root of
+  - `method_type`: One of `SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`
+  - `x0`, `x1`: Initial guesses or bracket endpoints
+  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `maxiters` (optional): `Int` (default: 1_000)
+
+**For One-Point Methods** (`NewtonsMethod`, `NewtonsMethodAD`):
+  `find_zero(f, method_type, x0, [soltype, tol, maxiters])`
+  - `f`: Function to find the root of (must return `(val, deriv)` tuple for `NewtonsMethod`)
+  - `method_type`: One of `NewtonsMethod`, `NewtonsMethodAD`
+  - `x0`: Initial guess
+  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `maxiters` (optional): `Int` (default: 1_000)
+
+# Examples
+
+```julia
+using RootSolvers, CUDA
+
+# --- Two-Point Methods (Broadcast over x0 and x1) ---
+x0 = CUDA.fill(1.0f0, 100)
+x1 = CUDA.fill(1.1f0, 100)
+# find_zero(f, SecantMethod, x0, x1)
+sol_secant = find_zero.(x -> x^2 - 2, SecantMethod, x0, x1)
+
+# --- One-Point Methods (Broadcast over x0) ---
+x0_newton = CUDA.fill(1.0f0, 100)
+# find_zero(f, NewtonsMethodAD, x0)
+sol_newton = find_zero.(x -> x^3 - 27, NewtonsMethodAD, x0_newton)
+```
+"""
 
 ####
 #### Numerical methods
@@ -956,12 +960,9 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT <: FTypes, M <: SecantMethod}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
 end
 
@@ -972,12 +973,9 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BisectionMethod}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_bracketed(
         f,
         _bisection_rule,
@@ -997,12 +995,9 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: RegulaFalsiMethod}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_bracketed(
         f,
         _regula_falsi_rule,
@@ -1022,12 +1017,9 @@ function find_zero(
     x0::FT,
     x1::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BrentsMethod}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
 end
 
@@ -1037,12 +1029,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethodAD}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_newton(
         Base.Fix1(value_deriv, f),
         f,
@@ -1059,12 +1048,9 @@ function find_zero(
     ::Type{M},
     x0::FT,
     soltype::SolutionType = CompactSolution(),
-    tol::Union{Nothing, AbstractTolerance} = nothing,
+    tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: NewtonsMethod}
-    if tol === nothing
-        tol = default_tol(FT)
-    end
     return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
 

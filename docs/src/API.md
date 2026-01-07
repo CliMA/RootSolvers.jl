@@ -44,22 +44,6 @@ NewtonsMethodAD
 NewtonsMethod
 ```
 
-### Method Selectors (for Broadcasting)
-
-For high-performance applications, especially on GPUs, use `MethodSelector` types to allow efficient broadcasting.
-
-| Selector | Best For |
-|:---|:---|
-| [`SecantSelector`](@ref)    | Broadcasting `SecantMethod`                    |
-| [`BrentsSelector`](@ref)    | Broadcasting `BrentsMethod`                    |
-| [`NewtonsSelector`](@ref)   | Broadcasting `NewtonsMethod`                   |
-| ...                         | (and corresponding selectors for other methods)|
-
-```@docs
-AbstractMethodSelector
-MethodSelector
-```
-
 ---
 
 ## Solution Types
@@ -74,6 +58,8 @@ These types control the level of detail in the output returned by `find_zero`.
 ```@docs
 CompactSolution
 VerboseSolution
+CompactSolutionResults
+VerboseSolutionResults
 ```
 
 ---
@@ -82,12 +68,12 @@ VerboseSolution
 
 Tolerance types define the convergence criteria for the solver.
 
-| Tolerance Type                                | Criterion             | Best For                                     |
-|:----------------------------------------------|:----------------------|:---------------------------------------------|
-| [`SolutionTolerance`](@ref)                   | `abs(x₂ - x₁)`        | When you want iterates to **stabilize**      |
+| Tolerance Type                                | Criterion             | Best For                                       |
+|:----------------------------------------------|:----------------------|:-----------------------------------------------|
+| [`SolutionTolerance`](@ref)                   | `abs(x₂ - x₁)`        | When you want iterates to **stabilize**        |
 | [`ResidualTolerance`](@ref)                   | `abs(f(x))`           | When you want the function value near **zero** |
-| [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`   | When root magnitude **varies widely**        |
-| [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute  | **Robust** for both small and large roots    |
+| [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`   | When root magnitude **varies widely**          |
+| [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute  | **Robust** for both small and large roots      |
 
 ```@docs
 AbstractTolerance

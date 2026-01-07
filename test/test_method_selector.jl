@@ -2,19 +2,19 @@
 using Test
 using RootSolvers
 
-@testset "Method Selector Tests" begin
+@testset "Method Type Tests" begin
     # Test function
     f(x) = x^2 - 2.0
 
     # Expected root
     root_val = sqrt(2.0)
 
-    # Test each selector type
+    # Test each method type
     @testset "Scalar Dispatch" begin
         # Secant
         sol = find_zero(
             f,
-            SecantSelector(),
+            SecantMethod,
             1.0,
             2.0,
             CompactSolution(),
@@ -26,7 +26,7 @@ using RootSolvers
         # Bisection
         sol = find_zero(
             f,
-            BisectionSelector(),
+            BisectionMethod,
             1.0,
             2.0,
             CompactSolution(),
@@ -38,7 +38,7 @@ using RootSolvers
         # Regula Falsi
         sol = find_zero(
             f,
-            RegulaFalsiSelector(),
+            RegulaFalsiMethod,
             1.0,
             2.0,
             CompactSolution(),
@@ -50,7 +50,7 @@ using RootSolvers
         # Brents
         sol = find_zero(
             f,
-            BrentsSelector(),
+            BrentsMethod,
             1.0,
             2.0,
             CompactSolution(),
@@ -62,7 +62,7 @@ using RootSolvers
         # Newton AD (needs x0)
         sol = find_zero(
             f,
-            NewtonsADSelector(),
+            NewtonsMethodAD,
             1.5,
             CompactSolution(),
             SolutionTolerance(1e-4),
@@ -74,7 +74,7 @@ using RootSolvers
         f_deriv(x) = (x^2 - 2.0, 2x)
         sol = find_zero(
             f_deriv,
-            NewtonsSelector(),
+            NewtonsMethod,
             1.5,
             CompactSolution(),
             SolutionTolerance(1e-4),
@@ -89,13 +89,11 @@ using RootSolvers
         x1 = ones(N) .* 2.0
 
         # Secant broadcasting
-        # Note: We must wrap the selector in Ref() or treat it as a scalar to broadcast correctly 
-        # against the arrays x0 and x1
-        selector = SecantSelector()
+        # Note: Method types broadcast as scalars (Ref(T)) effectively
         results =
             find_zero.(
                 f,
-                selector,
+                SecantMethod,
                 x0,
                 x1,
                 CompactSolution(),
@@ -106,11 +104,11 @@ using RootSolvers
         @test length(results) == N
         @test all(r -> abs(r.root - root_val) < 1e-4, results)
 
-        # Mix of scalar and array args (Testing the selector passing specifically)
+        # Mix of scalar and array args (Testing the type passing specifically)
         results =
             find_zero.(
                 f,
-                SecantSelector(),
+                SecantMethod,
                 x0,
                 2.0,
                 CompactSolution(),
@@ -119,14 +117,5 @@ using RootSolvers
             )
         @test length(results) == N
         @test all(r -> abs(r.root - root_val) < 1e-4, results)
-    end
-
-    @testset "Type Aliases" begin
-        @test SecantSelector === MethodSelector{SecantMethod}
-        @test NewtonsSelector === MethodSelector{NewtonsMethod}
-        @test NewtonsADSelector === MethodSelector{NewtonsMethodAD}
-        @test BrentsSelector === MethodSelector{BrentsMethod}
-        @test BisectionSelector === MethodSelector{BisectionMethod}
-        @test RegulaFalsiSelector === MethodSelector{RegulaFalsiMethod}
     end
 end
