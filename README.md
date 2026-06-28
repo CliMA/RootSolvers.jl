@@ -56,3 +56,7 @@ x1 = rand(100, 100)
 f(x) = x.^2 .- 2.0
 sol = find_zero.(f, SecantMethod(x0, x1), CompactSolution())
 ```
+
+## Contributing
+
+Contributors should follow the shared CliMA engineering standards in [`docs/dev-guides/`](docs/dev-guides/), which cover architecture, performance, code quality, documentation, and workflows. These are vendored from [CliMA/DeveloperGuides](https://github.com/CliMA/DeveloperGuides). The repo's [`AGENTS.md`](AGENTS.md) is a starting point for AI agents with repo-specific guidance.

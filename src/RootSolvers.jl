@@ -7,7 +7,7 @@ Contains functions for finding zeros of scalar functions using robust iterative 
 The main entry point is [`find_zero`](@ref), which supports multiple root-finding methods
 and tolerance criteria.
 
-## Supported Methods
+# Supported Methods
 - **Secant Method**: Requires two initial guesses, uses linear interpolation
 - **Bisection Method**: Requires bracketing interval with sign change, converges linearly
 - **Regula Falsi Method**: Requires bracketing interval with sign change
@@ -16,17 +16,17 @@ and tolerance criteria.
 - **Newton's Method with AD**: Requires one initial guess, uses automatic differentiation
 - **Newton's Method**: Requires one initial guess and user-provided derivative
 
-## GPU and Broadcasting
+# GPU and Broadcasting
 For high-performance applications such as GPU kernels, one can broadcast `find_zero` 
 efficiently by passing the method type directly (e.g., `SecantMethod`).
 
-## Method Selection Guide
+# Method Selection Guide
 - **Bracketing methods** (Bisection, Regula Falsi, Brent's): Use when you know an interval containing the root
 - **Brent's method**: Recommended for robust, guaranteed convergence with superlinear rate
 - **Secant method**: Good when you have two guesses but no bracketing interval
 - **Newton's methods**: Fastest convergence when you have a good initial guess
 
-## Example
+# Examples
 
 ```julia
 using RootSolvers
@@ -87,7 +87,7 @@ base_type(::Type{FT}) where {T, FT <: AbstractArray{T}} = base_type(T)
 const FTypes = Union{Real, AbstractArray}
 
 """
-    RootSolvingMethod{FT} <: AbstractType
+    RootSolvingMethod{FT}
 
 Abstract type for root-finding methods in RootSolvers.jl.
 
@@ -95,23 +95,23 @@ This is the base type for all numerical methods used to find roots of scalar fun
 Each concrete method type should implement the `method_args` function to extract
 initial guesses and parameters for the solver.
 
-## Type Parameters
-- `FT`: The floating-point type for computations (e.g., `Float64`, `Float32`)
+# Type Parameters
+- `FT`: The floating-point type for computations (e.g., `Float64`, `Float32`).
 
-## Concrete Implementations
-- [`SecantMethod{FT}`](@ref): Linear interpolation between two points
-- [`RegulaFalsiMethod{FT}`](@ref): Bracketing method with linear interpolation
-- [`BisectionMethod{FT}`](@ref): Simple bracketing method with guaranteed convergence
-- [`BrentsMethod{FT}`](@ref): Robust bracketing method combining multiple techniques
-- [`NewtonsMethodAD{FT}`](@ref): Newton's method with automatic differentiation
-- [`NewtonsMethod{FT}`](@ref): Newton's method with user-provided derivatives
+Subtypes:
+- [`SecantMethod{FT}`](@ref): Linear interpolation between two points.
+- [`RegulaFalsiMethod{FT}`](@ref): Bracketing method with linear interpolation.
+- [`BisectionMethod{FT}`](@ref): Simple bracketing method with guaranteed convergence.
+- [`BrentsMethod{FT}`](@ref): Robust bracketing method combining multiple techniques.
+- [`NewtonsMethodAD{FT}`](@ref): Newton's method with automatic differentiation.
+- [`NewtonsMethod{FT}`](@ref): Newton's method with user-provided derivatives.
 
-## Interface Requirements
+# Interface Requirements
 All concrete subtypes must implement:
-- `method_args(method)`: Return initial guesses as a tuple
-- `find_zero(f, method, args..., soltype, tol, maxiters)`: Main solver implementation
+- `method_args(method)`: Return initial guesses as a tuple.
+- `find_zero(f, method, args..., soltype, tol, maxiters)`: Main solver implementation.
 
-## Example
+# Examples
 ```julia
 # Define a custom method
 struct MyCustomMethod{FT} <: RootSolvingMethod{FT}
@@ -139,17 +139,17 @@ The method uses the recurrence relation:
 x_{n+1} = x_n - f(x_n) \\frac{x_n - x_{n-1}}{f(x_n) - f(x_{n-1})}
 ```
 
-## Convergence
+# Convergence
 - **Order**: Approximately 1.618 (superlinear)
 - **Requirements**: Two initial guesses, continuous function
 - **Advantages**: No derivative required, fast convergence
 - **Disadvantages**: May not converge if initial guesses are poor
 
-## Fields
-- `x0::FT`: First initial guess
-- `x1::FT`: Second initial guess
+# Fields
+- `x0::FT`: First initial guess.
+- `x1::FT`: Second initial guess.
 
-## Example
+# Examples
 ```julia
 method = SecantMethod{Float64}(0.0, 2.0)
 sol = find_zero(x -> x^3 - 8, method)
@@ -173,17 +173,17 @@ x_{n+1} = \\frac{x_0 + x_1}{2}
 ```
 where the interval `[x0, x1]` is updated based on the sign of `f(x_{n+1})`.
 
-## Convergence
+# Convergence
 - **Order**: Linear (slower than Newton's method)
 - **Requirements**: Bracketing interval with `f(x0) * f(x1) < 0`
 - **Advantages**: Guaranteed convergence, simple implementation
 - **Disadvantages**: Slower convergence than other methods
 
-## Fields
-- `x0::FT`: Lower bound of bracketing interval
-- `x1::FT`: Upper bound of bracketing interval
+# Fields
+- `x0::FT`: Lower bound of bracketing interval.
+- `x1::FT`: Upper bound of bracketing interval.
 
-## Example
+# Examples
 ```julia
 # Find root of x^3 - 2 in interval [-1, 2]
 method = BisectionMethod{Float64}(-1.0, 2.0)
@@ -204,17 +204,17 @@ that maintains the sign change property and uses linear interpolation to find th
 The method requires that `f(x0)` and `f(x1)` have opposite signs, ensuring that
 a root exists in the interval `[x0, x1]`.
 
-## Convergence
+# Convergence
 - **Order**: Linear (slower than Newton's method)
 - **Requirements**: Bracketing interval with `f(x0) * f(x1) < 0`
 - **Advantages**: Guaranteed convergence, robust
 - **Disadvantages**: Slower convergence than other methods
 
-## Fields
-- `x0::FT`: Lower bound of bracketing interval
-- `x1::FT`: Upper bound of bracketing interval
+# Fields
+- `x0::FT`: Lower bound of bracketing interval.
+- `x1::FT`: Upper bound of bracketing interval.
 
-## Example
+# Examples
 ```julia
 # Find root of x^3 - 2 in interval [-1, 2]
 method = RegulaFalsiMethod{Float64}(-1.0, 2.0)
@@ -236,17 +236,17 @@ property and provides superlinear convergence.
 The method requires that `f(x0)` and `f(x1)` have opposite signs, ensuring that
 a root exists in the interval `[x0, x1]`.
 
-## Convergence
+# Convergence
 - **Order**: Superlinear (faster than Regula Falsi)
 - **Requirements**: Bracketing interval with `f(x0) * f(x1) < 0`
 - **Advantages**: Guaranteed convergence, fast convergence, robust
 - **Disadvantages**: More complex than simpler bracketing methods
 
-## Fields
-- `x0::FT`: Lower bound of bracketing interval
-- `x1::FT`: Upper bound of bracketing interval
+# Fields
+- `x0::FT`: Lower bound of bracketing interval.
+- `x1::FT`: Upper bound of bracketing interval.
 
-## Example
+# Examples
 ```julia
 # Find root of x^3 - 2 in interval [-1, 2]
 method = BrentsMethod{Float64}(-1.0, 2.0)
@@ -264,7 +264,7 @@ end
 Newton's method for root finding using automatic differentiation to compute derivatives.
 This method provides quadratic convergence when close to the root and the derivative
 is non-zero. The implementation includes step size limiting and backtracking line search
-for robustness.
+for robustness, and falls back to the secant method when the derivative becomes too small.
 
 The method uses the iteration
 ```math
@@ -272,16 +272,16 @@ x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}
 ```
 where the derivative `f'(x_n)` is computed using ForwardDiff.jl.
 
-## Convergence
+# Convergence
 - **Order**: Quadratic (very fast near the root)
 - **Requirements**: Differentiable function, good initial guess
 - **Advantages**: Fast convergence, automatic derivative computation, robust step size control
 - **Disadvantages**: May not converge if initial guess is poor or derivative is zero
 
-## Fields
-- `x0::FT`: Initial guess for the root
+# Fields
+- `x0::FT`: Initial guess for the root.
 
-## Example
+# Examples
 ```julia
 # Find cube root of 27
 method = NewtonsMethodAD{Float64}(2.0)
@@ -297,27 +297,28 @@ end
 
 Newton's method for root finding where the user provides both the function and its derivative.
 This method provides quadratic convergence when close to the root. The implementation includes
-step size limiting and backtracking line search for robustness.
+step size limiting and backtracking line search for robustness, and falls back to the secant
+method when the derivative becomes too small.
 
 The method uses the iteration
 ```math
 x_{n+1} = x_n - \\frac{f(x_n)}{f'(x_n)}
 ```
 
-## Convergence
+# Convergence
 - **Order**: Quadratic (very fast near the root)
 - **Requirements**: Function and derivative, good initial guess
 - **Advantages**: Fast convergence, no automatic differentiation overhead, robust step size control
 - **Disadvantages**: Requires manual derivative computation
 
-## Fields
-- `x0::FT`: Initial guess for the root
+# Fields
+- `x0::FT`: Initial guess for the root.
 
-## Note
+# Notes
 When using this method, your function `f` should return a tuple `(f(x), f'(x))` containing
 both the function value and its derivative at `x`.
 
-## Example
+# Examples
 ```julia
 # Find root of x^2 - 4, providing both function and derivative
 f_and_df(x) = (x^2 - 4, 2x)
@@ -333,7 +334,7 @@ end
 
 
 """
-    SolutionType <: AbstractType
+    SolutionType
 
 Abstract type for solution formats in RootSolvers.jl.
 
@@ -341,17 +342,17 @@ This is the base type for all solution types that control the level of detail
 returned by `find_zero`. Each concrete solution type should implement the
 `SolutionResults` constructor and history management functions.
 
-## Concrete Implementations
-- [`CompactSolution`](@ref): Memory-efficient, GPU-compatible solution with minimal output
-- [`VerboseSolution`](@ref): CPU-only solution with detailed diagnostics and iteration history
+Subtypes:
+- [`CompactSolution`](@ref): Memory-efficient, GPU-compatible solution with minimal output.
+- [`VerboseSolution`](@ref): CPU-only solution with detailed diagnostics and iteration history.
 
-## Interface Requirements
+# Interface Requirements
 All concrete subtypes must implement:
-- `SolutionResults(soltype, args...)`: Constructor for the corresponding results type
-- `init_history(soltype, x)`: Initialize history storage for the solution type
-- `push_history!(history, x, soltype)`: Add a value to the history
+- `SolutionResults(soltype, args...)`: Constructor for the corresponding results type.
+- `init_history(soltype, x)`: Initialize history storage for the solution type.
+- `push_history!(history, x, soltype)`: Add a value to the history.
 
-## Example
+# Examples
 ```julia
 # Define a custom solution type
 struct MySolution <: SolutionType end
@@ -377,20 +378,20 @@ including iteration history and convergence diagnostics.
 When used with `find_zero`, returns a `VerboseSolutionResults` object
 containing the root, convergence status, error information, and complete iteration history.
 
-## Accessing Results
+# Accessing Results
 The returned `VerboseSolutionResults` object contains the following fields:
-- `sol.root`: The found root value
-- `sol.converged`: Boolean indicating if the method converged
-- `sol.err`: Final error value (function value at the root)
-- `sol.iter_performed`: Number of iterations performed
-- `sol.root_history`: Vector of all root values during iteration
-- `sol.err_history`: Vector of all error values during iteration
+- `sol.root`: The found root value.
+- `sol.converged`: Boolean indicating if the method converged.
+- `sol.err`: Final error value (function value at the root).
+- `sol.iter_performed`: Number of iterations performed.
+- `sol.root_history`: Vector of all root values during iteration.
+- `sol.err_history`: Vector of all error values during iteration.
 
-## Note
+# Notes
 This solution type stores iteration history and is primarily intended for CPU computations.
 For GPU computations or when memory usage is a concern, use `CompactSolution` instead.
 
-## Example
+# Examples
 ```julia
 sol = find_zero(x -> x^2 - 4, SecantMethod(1.0, 3.0), VerboseSolution())
 
@@ -476,12 +477,12 @@ When used with `find_zero`, returns a `CompactSolutionResults` object
 containing only the root value and convergence status. This solution type is GPU-compatible
 and suitable for high-performance applications where memory usage is critical.
 
-## Accessing Results
+# Accessing Results
 The returned `CompactSolutionResults` object contains the following fields:
-- `sol.root`: The found root value
-- `sol.converged`: Boolean indicating if the method converged
+- `sol.root`: The found root value.
+- `sol.converged`: Boolean indicating if the method converged.
 
-## Example
+# Examples
 ```julia
 sol = find_zero(x -> x^2 - 4, 
                SecantMethod{Float64}(0.0, 3.0), 
@@ -551,28 +552,30 @@ function push_history!(
 end
 
 """
-    AbstractTolerance{FT} <: AbstractType
+    AbstractTolerance{FT}
 
 Abstract type for tolerance criteria in RootSolvers.jl.
 
 This is the base type for all tolerance types that define convergence criteria
 for root-finding algorithms. Each concrete tolerance type should implement
-the callable interface `(tol)(x1, x2, y)` for convergence checking.
+the callable interface `(tol)(x1, x2, y)` for convergence checking. By convention, a
+tolerance also reports convergence when the residual `|y|` falls below the machine epsilon
+of its type, so an exact root is always detected regardless of the criterion.
 
-## Type Parameters
-- `FT`: The floating-point type for tolerance values (e.g., `Float64`, `Float32`)
+# Type Parameters
+- `FT`: The floating-point type for tolerance values (e.g., `Float64`, `Float32`).
 
-## Concrete Implementations
-- [`ResidualTolerance{FT}`](@ref): Based on `|f(x)|`
-- [`SolutionTolerance{FT}`](@ref): Based on `|x_{n+1} - x_n|`
-- [`RelativeSolutionTolerance{FT}`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
-- [`RelativeOrAbsoluteSolutionTolerance{FT}`](@ref): Combined relative and absolute tolerance
+Subtypes:
+- [`ResidualTolerance{FT}`](@ref): Based on `|f(x)|`.
+- [`SolutionTolerance{FT}`](@ref): Based on `|x_{n+1} - x_n|`.
+- [`RelativeSolutionTolerance{FT}`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`.
+- [`RelativeOrAbsoluteSolutionTolerance{FT}`](@ref): Combined relative and absolute tolerance.
 
-## Interface Requirements
+# Interface Requirements
 All concrete subtypes must implement:
 - `(tol)(x1, x2, y)`: Check convergence using three arguments (previous iterate, current iterate, function value)
 
-## Example
+# Examples
 ```julia
 # Define a custom tolerance type
 struct MyTolerance{FT} <: AbstractTolerance{FT}
@@ -599,10 +602,10 @@ the machine epsilon of the function value type).
 This tolerance is appropriate when you want to ensure that the function value is
 sufficiently close to zero, regardless of how close consecutive iterates are.
 
-## Fields
-- `tol::FT`: Tolerance threshold for `|f(x)|`
+# Fields
+- `tol::FT`: Tolerance threshold for `|f(x)|`.
 
-## Example
+# Examples
 ```julia
 tol = ResidualTolerance(1e-10)
 sol = find_zero(x -> x^2 - 4, 
@@ -635,10 +638,10 @@ Convergence is also triggered if |f(x)| is smaller than the machine epsilon for 
 This tolerance is appropriate when you want to ensure that consecutive iterates are
 sufficiently close, indicating that the solution has stabilized.
 
-## Fields
-- `tol::FT`: Tolerance threshold for `|x_{n+1} - x_n|`
+# Fields
+- `tol::FT`: Tolerance threshold for `|x_{n+1} - x_n|`.
 
-## Example
+# Examples
 ```julia
 tol = SolutionTolerance(1e-8)
 sol = find_zero(x -> x^3 - 8, 
@@ -669,14 +672,14 @@ Convergence is also triggered if |f(x)| is smaller than the machine epsilon for 
 This tolerance is appropriate when you want to ensure convergence relative to the magnitude of 
 the solution, which is useful when the root value might be very large or very small.
 
-## Fields
-- `tol::FT`: Relative tolerance threshold
+# Fields
+- `tol::FT`: Relative tolerance threshold.
 
-## Warning
-This tolerance criterion can fail if `x_n ≈ 0` during iteration, as it involves division by `x_n`.
-Consider using `RelativeOrAbsoluteSolutionTolerance` for more robust behavior.
+!!! warning
+    This tolerance criterion can fail if `x_n ≈ 0` during iteration, as it involves division
+    by `x_n`. Consider using [`RelativeOrAbsoluteSolutionTolerance`](@ref) for more robust behavior.
 
-## Example
+# Examples
 ```julia
 tol = RelativeSolutionTolerance(1e-6)
 sol = find_zero(x -> x^2 - 1e6, 
@@ -704,14 +707,14 @@ A robust convergence criterion combining both relative and absolute tolerances.
 The iteration stops when either `|(x_{n+1} - x_n)/x_n| < rtol` OR `|x_{n+1} - x_n| < atol`.
 
 This tolerance provides robust behavior across different scales of root values:
-- The relative tolerance `rtol` ensures accuracy for large roots
-- The absolute tolerance `atol` ensures convergence when the root is near zero
+- The relative tolerance `rtol` ensures accuracy for large roots.
+- The absolute tolerance `atol` ensures convergence when the root is near zero.
 
-## Fields
-- `rtol::FT`: Relative tolerance threshold
-- `atol::FT`: Absolute tolerance threshold
+# Fields
+- `rtol::FT`: Relative tolerance threshold.
+- `atol::FT`: Absolute tolerance threshold.
 
-## Example
+# Examples
 ```julia
 # Use relative tolerance of 1e-6 and absolute tolerance of 1e-10
 tol = RelativeOrAbsoluteSolutionTolerance(1e-6, 1e-10)
@@ -746,8 +749,8 @@ This is the main entry point for root finding in RootSolvers.jl. Given a functio
 it finds a value `x` such that `f(x) ≈ 0` using iterative numerical methods. The function
 supports various root-finding algorithms, tolerance criteria, and solution formats.
 
-## Arguments
-- `f::Function`: The function for which to find a root. Should take a scalar input and return a scalar output.
+# Arguments
+- `f::Function`: The function for which to find a root. Should take a real scalar input and return a real scalar output.
 - `method::RootSolvingMethod`: The numerical method to use. Available methods:
     - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
@@ -756,23 +759,23 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
       quadratic interpolation
     - [`NewtonsMethodAD`](@ref): Newton's method with automatic differentiation (quadratic convergence)
     - [`NewtonsMethod`](@ref): Newton's method with user-provided derivative (quadratic convergence)
-- `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution()`](@ref)):
+- `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution`](@ref)):
     - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
     - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
-- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion. If `nothing` (default), uses [`SolutionTolerance(1e-4)`](@ref) for `Float64` or `1e-3` otherwise. Available tolerance types:
+- `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion. If `nothing` (default), uses [`SolutionTolerance`](@ref)`(1e-4)` for `Float64` or `1e-3` otherwise. Available tolerance types:
     - [`ResidualTolerance`](@ref): Based on `|f(x)|`
     - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
     - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
     - [`RelativeOrAbsoluteSolutionTolerance`](@ref): Combined relative and absolute tolerance
 - `maxiters::Int`: Maximum number of iterations allowed (default: 1,000)
 
-## Returns
+# Returns
 - `AbstractSolutionResults`: Solution object containing the root and convergence information.
   The exact type depends on the `soltype` parameter:
   - `CompactSolutionResults`: Contains `root` and `converged` fields
   - `VerboseSolutionResults`: Additionally contains `err`, `iter_performed`, and iteration history
 
-## Examples
+# Examples
 
 ```julia
 using RootSolvers
@@ -803,7 +806,21 @@ println("π/2 ≈ \$(sol.root)")
 sol = find_zero(x -> x^3 - 2x - 5, RegulaFalsiMethod{Float64}(2.0, 3.0))
 ```
 
-## Batch and GPU Root-Finding (Broadcasting)
+# Notes
+`f` must be scalar and real-valued; systems of equations and complex roots are not supported.
+
+`find_zero` never throws when a method fails to converge — it always returns a results object,
+so check `sol.converged` before using `sol.root`. A bracketing method given an interval with no
+sign change returns `converged = false` with `sol.root` set to the endpoint of smaller residual,
+rather than erroring. This non-throwing contract is what makes `find_zero` safe to broadcast on
+the GPU.
+
+Every tolerance also reports convergence once `|f(x)|` drops below the machine epsilon of the
+residual type. For bracketing methods, the solution-based tolerances ([`SolutionTolerance`](@ref),
+[`RelativeSolutionTolerance`](@ref)) measure the width of the current bracket rather than the step
+between successive iterates.
+
+# Batch and GPU Root-Finding (Broadcasting)
 
 
 You can broadcast `find_zero` over arrays of initial guesses to solve many root-finding problems in parallel, including on the GPU.
@@ -818,7 +835,7 @@ sol = find_zero.(x -> x.^2 .- 2, SecantMethod, x0, x0 .+ 1, CompactSolution())
 
 This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
 
-## Method Selection Guide
+# Method Selection Guide
 - **BisectionMethod**: Simple general-purpose bracketing method, slow but guaranteed convergence
 - **SecantMethod**: Good general-purpose method, no derivatives needed
 - **RegulaFalsiMethod**: Use when you need guaranteed convergence with a bracketing interval
@@ -826,7 +843,7 @@ This is especially useful for large-scale or batched root-finding on GPUs. Only 
 - **NewtonsMethodAD**: Fastest convergence when derivatives are available via autodiff
 - **NewtonsMethod**: Use when you can provide analytical derivatives efficiently
 
-## See Also
+# See Also
 - [`BisectionMethod`](@ref), [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
 - [`CompactSolution`](@ref), [`VerboseSolution`](@ref)
 - [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref)
@@ -837,17 +854,17 @@ function find_zero end
 """
     default_tol(FT)
 
-Returns the default tolerance for a given type `FT`.
-This is a helper function to provide a consistent default tolerance
-for different numerical types.
+Return the default tolerance for floating-point type `FT`: a [`SolutionTolerance`](@ref) of
+`1e-4` for `Float64` and `1e-3` for other floating-point types. Used by [`find_zero`](@ref)
+when no tolerance is given.
 
-## Arguments
-- `FT`: The type of the numerical value (e.g., `Float64`, `ComplexF64`).
+# Arguments
+- `FT`: The floating-point type of the iterates (e.g., `Float64`, `Float32`).
 
-## Returns
+# Returns
 - `AbstractTolerance`: A default tolerance object.
 
-## Example
+# Examples
 ```julia
 using RootSolvers
 
@@ -901,6 +918,12 @@ function Broadcast.broadcasted(
     )
 end
 
+####
+#### Numerical methods
+####
+
+@inline method_args(method::SecantMethod) = (method.x0, method.x1)
+
 """
     find_zero(f, method_type::Type{<:RootSolvingMethod}, args...)
 
@@ -913,23 +936,29 @@ method to many problems with different initialization values (e.g., on the GPU).
 
 The required `args...` depend on the specific `method_type` chosen:
 
-**For Two-Point/Bracketing Methods** (`SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`):
+**For Two-Point/Bracketing Methods** ([`SecantMethod`](@ref), [`BisectionMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref)):
   `find_zero(f, method_type, x0, x1, [soltype, tol, maxiters])`
   - `f`: Function to find the root of
   - `method_type`: One of `SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`
   - `x0`, `x1`: Initial guesses or bracket endpoints
-  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
-  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `soltype` (optional): [`SolutionType`](@ref) (default: [`CompactSolution`](@ref)`()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance`](@ref)`(1e-4)` for `Float64`, `1e-3` otherwise)
   - `maxiters` (optional): `Int` (default: 1_000)
 
-**For One-Point Methods** (`NewtonsMethod`, `NewtonsMethodAD`):
+**For One-Point Methods** ([`NewtonsMethod`](@ref), [`NewtonsMethodAD`](@ref)):
   `find_zero(f, method_type, x0, [soltype, tol, maxiters])`
   - `f`: Function to find the root of (must return `(val, deriv)` tuple for `NewtonsMethod`)
   - `method_type`: One of `NewtonsMethod`, `NewtonsMethodAD`
   - `x0`: Initial guess
-  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
-  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance(1e-4)`](@ref) for `Float64`, `1e-3` otherwise)
+  - `soltype` (optional): [`SolutionType`](@ref) (default: [`CompactSolution`](@ref)`()`)
+  - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance`](@ref)`(1e-4)` for `Float64`, `1e-3` otherwise)
   - `maxiters` (optional): `Int` (default: 1_000)
+
+# Returns
+- `AbstractSolutionResults`: Solution object containing the root and convergence information.
+  The exact type depends on the `soltype` parameter:
+  - `CompactSolutionResults`: Contains `root` and `converged` fields
+  - `VerboseSolutionResults`: Additionally contains `err`, `iter_performed`, and iteration history
 
 # Examples
 
@@ -948,12 +977,6 @@ x0_newton = CUDA.fill(1.0f0, 100)
 sol_newton = find_zero.(x -> x^3 - 27, NewtonsMethodAD, x0_newton)
 ```
 """
-
-####
-#### Numerical methods
-####
-
-@inline method_args(method::SecantMethod) = (method.x0, method.x1)
 function find_zero(
     f::F,
     ::Type{M},
@@ -1465,13 +1488,13 @@ Extract the initial guess(es) for a root-solving method for internal dispatch.
 This function is used internally to unpack method parameters for passing to the
 appropriate `find_zero` implementation.
 
-## Arguments
-- `method::RootSolvingMethod`: The root-solving method instance
+# Arguments
+- `method::RootSolvingMethod`: The root-solving method instance.
 
-## Returns
-- `Tuple`: Initial guess(es) specific to the method type
+# Returns
+- `Tuple`: Initial guess(es) specific to the method type.
 
-## Example
+# Examples
 ```julia
 method = SecantMethod{Float64}(0.0, 1.0)
 args = method_args(method)  # Returns (0.0, 1.0)
@@ -1488,14 +1511,14 @@ This function uses ForwardDiff.jl to simultaneously compute `f(x)` and `f'(x)`, 
 more efficient than computing them separately when both are needed (as in Newton's method). It
 is used internally by `NewtonsMethodAD`.
 
-## Arguments
-- `f`: Function to evaluate
-- `x::FT`: Point at which to evaluate the function and derivative
+# Arguments
+- `f`: Function to evaluate.
+- `x::FT`: Point at which to evaluate the function and derivative.
 
-## Returns
-- `Tuple{FT, FT}`: `(f(x), f'(x))` where the second element is the derivative
+# Returns
+- `Tuple{FT, FT}`: `(f(x), f'(x))` where the second element is the derivative.
 
-## Example
+# Examples
 ```julia
 f(x) = x^3 - 2x + 1
 val, deriv = value_deriv(f, 1.5)
