@@ -264,7 +264,7 @@ end
 Newton's method for root finding using automatic differentiation to compute derivatives.
 This method provides quadratic convergence when close to the root and the derivative
 is non-zero. The implementation includes step size limiting and backtracking line search
-for robustness.
+for robustness, and falls back to the secant method when the derivative becomes too small.
 
 The method uses the iteration
 ```math
@@ -297,7 +297,8 @@ end
 
 Newton's method for root finding where the user provides both the function and its derivative.
 This method provides quadratic convergence when close to the root. The implementation includes
-step size limiting and backtracking line search for robustness.
+step size limiting and backtracking line search for robustness, and falls back to the secant
+method when the derivative becomes too small.
 
 The method uses the iteration
 ```math
@@ -557,7 +558,9 @@ Abstract type for tolerance criteria in RootSolvers.jl.
 
 This is the base type for all tolerance types that define convergence criteria
 for root-finding algorithms. Each concrete tolerance type should implement
-the callable interface `(tol)(x1, x2, y)` for convergence checking.
+the callable interface `(tol)(x1, x2, y)` for convergence checking. By convention, a
+tolerance also reports convergence when the residual `|y|` falls below the machine epsilon
+of its type, so an exact root is always detected regardless of the criterion.
 
 # Type Parameters
 - `FT`: The floating-point type for tolerance values (e.g., `Float64`, `Float32`).
@@ -747,7 +750,7 @@ it finds a value `x` such that `f(x) ≈ 0` using iterative numerical methods. T
 supports various root-finding algorithms, tolerance criteria, and solution formats.
 
 # Arguments
-- `f::Function`: The function for which to find a root. Should take a scalar input and return a scalar output.
+- `f::Function`: The function for which to find a root. Should take a real scalar input and return a real scalar output.
 - `method::RootSolvingMethod`: The numerical method to use. Available methods:
     - [`BisectionMethod`](@ref): Bracketing method maintaining sign change (linear convergence, guaranteed)
     - [`SecantMethod`](@ref): Uses linear interpolation between two points (superlinear convergence)
@@ -803,6 +806,20 @@ println("π/2 ≈ \$(sol.root)")
 sol = find_zero(x -> x^3 - 2x - 5, RegulaFalsiMethod{Float64}(2.0, 3.0))
 ```
 
+# Notes
+`f` must be scalar and real-valued; systems of equations and complex roots are not supported.
+
+`find_zero` never throws when a method fails to converge — it always returns a results object,
+so check `sol.converged` before using `sol.root`. A bracketing method given an interval with no
+sign change returns `converged = false` with `sol.root` set to the endpoint of smaller residual,
+rather than erroring. This non-throwing contract is what makes `find_zero` safe to broadcast on
+the GPU.
+
+Every tolerance also reports convergence once `|f(x)|` drops below the machine epsilon of the
+residual type. For bracketing methods, the solution-based tolerances ([`SolutionTolerance`](@ref),
+[`RelativeSolutionTolerance`](@ref)) measure the width of the current bracket rather than the step
+between successive iterates.
+
 # Batch and GPU Root-Finding (Broadcasting)
 
 
@@ -837,12 +854,12 @@ function find_zero end
 """
     default_tol(FT)
 
-Returns the default tolerance for a given type `FT`.
-This is a helper function to provide a consistent default tolerance
-for different numerical types.
+Return the default tolerance for floating-point type `FT`: a [`SolutionTolerance`](@ref) of
+`1e-4` for `Float64` and `1e-3` for other floating-point types. Used by [`find_zero`](@ref)
+when no tolerance is given.
 
 # Arguments
-- `FT`: The type of the numerical value (e.g., `Float64`, `ComplexF64`).
+- `FT`: The floating-point type of the iterates (e.g., `Float64`, `Float32`).
 
 # Returns
 - `AbstractTolerance`: A default tolerance object.
@@ -919,23 +936,29 @@ method to many problems with different initialization values (e.g., on the GPU).
 
 The required `args...` depend on the specific `method_type` chosen:
 
-**For Two-Point/Bracketing Methods** (`SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`):
+**For Two-Point/Bracketing Methods** ([`SecantMethod`](@ref), [`BisectionMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref)):
   `find_zero(f, method_type, x0, x1, [soltype, tol, maxiters])`
   - `f`: Function to find the root of
   - `method_type`: One of `SecantMethod`, `BisectionMethod`, `RegulaFalsiMethod`, `BrentsMethod`
   - `x0`, `x1`: Initial guesses or bracket endpoints
-  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `soltype` (optional): [`SolutionType`](@ref) (default: [`CompactSolution`](@ref)`()`)
   - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance`](@ref)`(1e-4)` for `Float64`, `1e-3` otherwise)
   - `maxiters` (optional): `Int` (default: 1_000)
 
-**For One-Point Methods** (`NewtonsMethod`, `NewtonsMethodAD`):
+**For One-Point Methods** ([`NewtonsMethod`](@ref), [`NewtonsMethodAD`](@ref)):
   `find_zero(f, method_type, x0, [soltype, tol, maxiters])`
   - `f`: Function to find the root of (must return `(val, deriv)` tuple for `NewtonsMethod`)
   - `method_type`: One of `NewtonsMethod`, `NewtonsMethodAD`
   - `x0`: Initial guess
-  - `soltype` (optional): `SolutionType` (default: `CompactSolution()`)
+  - `soltype` (optional): [`SolutionType`](@ref) (default: [`CompactSolution`](@ref)`()`)
   - `tol` (optional): `AbstractTolerance` (default: [`SolutionTolerance`](@ref)`(1e-4)` for `Float64`, `1e-3` otherwise)
   - `maxiters` (optional): `Int` (default: 1_000)
+
+# Returns
+- `AbstractSolutionResults`: Solution object containing the root and convergence information.
+  The exact type depends on the `soltype` parameter:
+  - `CompactSolutionResults`: Contains `root` and `converged` fields
+  - `VerboseSolutionResults`: Additionally contains `err`, `iter_performed`, and iteration history
 
 # Examples
 

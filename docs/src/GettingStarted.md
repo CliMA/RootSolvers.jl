@@ -4,7 +4,7 @@
 CurrentModule = RootSolvers
 ```
 
-RootSolvers.jl is a Julia package for finding roots of nonlinear equations using robust, efficient, and GPU-capable numerical methods. It provides a simple, unified interface for a variety of classic root-finding algorithms, with flexible convergence criteria and solution reporting.
+This guide covers installing RootSolvers.jl and solving your first root-finding problems. For the full list of methods, solution types, and tolerances, see the [API Reference](API.md).
 
 ---
 
@@ -89,6 +89,8 @@ sol = find_zero(f, method, soltype, tol)
 - `sol.converged`: `true` if a root was found.
 - `sol.root`: The root value.
 - `sol.err`, `sol.iter_performed`, `sol.root_history` (available with [`VerboseSolution`](@ref)).
+
+`find_zero` does not throw when a method fails to converge (so that it stays GPU-safe), so always check `sol.converged` before using `sol.root` — on failure, `sol.root` holds the best estimate found.
 
 ### Specific Example: Newton's Method with a Provided Derivative
 
