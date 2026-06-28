@@ -204,11 +204,11 @@ println("Root field shape: ", size(root_field))
 
 You can achieve significant speedups by running large batches of problems on a GPU.
 !!! note "GPU Backends"
-    The following examples use ['CUDA.jl`](https://cuda.juliagpu.org/stable/), but similar results can be achieved for different GPU backends with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/).
+    The following examples use [`CUDA.jl`](https://cuda.juliagpu.org/stable/), but similar results can be achieved for different GPU backends with [`KernelAbstractions.jl`](https://juliagpu.github.io/KernelAbstractions.jl/stable/).
 
 ### GPU Usage Tips
 
-- **Use[`CompactSolution`](@ref):** Only [`CompactSolution`](@ref) is GPU-friendly. [`VerboseSolution`](@ref) is for CPU debugging only.
+- **Use [`CompactSolution`](@ref):** Only [`CompactSolution`](@ref) is GPU-friendly. [`VerboseSolution`](@ref) is for CPU debugging only.
 - **GPU-Compatible Function:** Ensure your function `f(x)` uses only GPU-supported operations.
 - **Minimize Data Transfer:** Keep initial guesses and results on the GPU.
 
@@ -232,7 +232,7 @@ sol = find_zero.(f, SecantMethod, x0, x1, CompactSolution()) # broadcast launche
 converged_field = map(sol_i -> sol_i.converged, sol)
 root_field = map(sol_i -> sol_i.root, sol)
 
-println("All converged: ", all(converged_field)) # Ouput: "All converged: true"
+println("All converged: ", all(converged_field)) # Output: "All converged: true"
 println("Root field shape: ", size(root_field)) # Output "Root field shape: (1000, 1000)"
 ```
 
@@ -257,7 +257,7 @@ end
 converged_field = map(sol_i -> sol_i.converged, sol)
 root_field = map(sol_i -> sol_i.root, sol)
 
-println("All converged: ", all(converged_field)) # Ouput: "All converged: true"
+println("All converged: ", all(converged_field)) # Output: "All converged: true"
 println("Root field shape: ", size(root_field)) # Output "Root field shape: (1000, 1000)"
 ```
 
@@ -305,7 +305,7 @@ println("Root field shape: ", size(root_field)) # Output "Root field shape: (100
 ## Troubleshooting
 
 - If not converging, try different initial guesses or a bracketing method such as [`BrentsMethod`](@ref).
-- Use [`VerboseSolution()`](@ref) to inspect the iteration history and diagnose issues.
+- Use [`VerboseSolution`](@ref) to inspect the iteration history and diagnose issues.
 - Adjust the tolerance for stricter or looser convergence criteria.
 
 ## Extending RootSolvers.jl
