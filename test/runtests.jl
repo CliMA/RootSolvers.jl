@@ -385,7 +385,11 @@ end
                     return sol.root^2
                 end
                 deriv = ForwardDiff.derivative(f, θ)
-                @test abs(deriv - 2 * θ) <= default_tol(FT).tol
+                # Differentiating through the iterative solver inherits its solution
+                # tolerance, with a small amplification: solution-tolerance methods stop
+                # on |xₙ₊₁ - xₙ| < tol, so the root — and its θ-derivative — are located to
+                # within a small multiple of tol (cf. the tol_factor slack used here).
+                @test abs(deriv - 2 * θ) <= 2 * default_tol(FT).tol
             end
         end
 
@@ -396,3 +400,4 @@ end
 include("test_method_selector.jl") # Tests for method selector functionality
 include("verify_selector_defaults.jl") # Tests for method selector defaults
 include("test_printing.jl")    # Tests for solution pretty printing
+include("test_robustness.jl")  # Line-search, bracketing-convergence, default_tol fixes

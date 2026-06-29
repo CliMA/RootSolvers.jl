@@ -625,7 +625,7 @@ Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the 
 epsilon of the function value type.
 """
 (tol::ResidualTolerance)(x1, x2, y) =
-    abs(y) < tol.tol || abs(y) < eps(typeof(y))
+    (abs(y) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 
 """
@@ -660,7 +660,7 @@ end
 Evaluates solution tolerance, based on ``|x2-x1|``
 """
 (tol::SolutionTolerance)(x1, x2, y) =
-    abs(x2 - x1) < tol.tol || abs(y) < eps(typeof(y))
+    (abs(x2 - x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
     RelativeSolutionTolerance{FT} 
@@ -698,7 +698,7 @@ end
 Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
 """
 (tol::RelativeSolutionTolerance)(x1, x2, y) =
-    abs((x2 - x1) / x1) < tol.tol || abs(y) < eps(typeof(y))
+    (abs((x2 - x1) / x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
     RelativeOrAbsoluteSolutionTolerance{FT} 
@@ -736,9 +736,9 @@ Evaluates combined relative and absolute tolerance, based
 on ``|(x2-x1)/x1| || |x2-x1|``
 """
 (tol::RelativeOrAbsoluteSolutionTolerance)(x1, x2, y) =
-    abs((x2 - x1) / x1) < tol.rtol ||
-    abs(x2 - x1) < tol.atol ||
-    abs(y) < eps(typeof(y))
+    (abs((x2 - x1) / x1) < tol.rtol) |
+    (abs(x2 - x1) < tol.atol) |
+    (abs(y) < eps(typeof(y)))
 
 """
     find_zero(f, method, soltype=CompactSolution(), tol=nothing, maxiters=1_000)
@@ -815,10 +815,10 @@ sign change returns `converged = false` with `sol.root` set to the endpoint of s
 rather than erroring. This non-throwing contract is what makes `find_zero` safe to broadcast on
 the GPU.
 
-Every tolerance also reports convergence once `|f(x)|` drops below the machine epsilon of the
-residual type. For bracketing methods, the solution-based tolerances ([`SolutionTolerance`](@ref),
-[`RelativeSolutionTolerance`](@ref)) measure the width of the current bracket rather than the step
-between successive iterates.
+The solution-based tolerances ([`SolutionTolerance`](@ref), [`RelativeSolutionTolerance`](@ref))
+measure the change between successive iterates, `|x_{n+1} - x_n|`, for every method, including the
+bracketing ones. Every tolerance also reports convergence once `|f(x)|` drops below the machine
+epsilon of the residual type.
 
 # Batch and GPU Root-Finding (Broadcasting)
 
@@ -850,16 +850,22 @@ This is especially useful for large-scale or batched root-finding on GPUs. Only 
 """
 function find_zero end
 
-# Helper to get the default tolerance for a given type
+# Default tolerance value, keyed on the underlying floating-point type so that scalars,
+# arrays, and dual numbers over the same element type share the same default.
+_default_tol_value(::Type{Float64}) = 1e-4
+_default_tol_value(::Type{FT}) where {FT <: AbstractFloat} = FT(1e-3)
+
 """
     default_tol(FT)
 
-Return the default tolerance for floating-point type `FT`: a [`SolutionTolerance`](@ref) of
-`1e-4` for `Float64` and `1e-3` for other floating-point types. Used by [`find_zero`](@ref)
-when no tolerance is given.
+Return the default tolerance for type `FT`: a [`SolutionTolerance`](@ref) of `1e-4` when the
+underlying element type is `Float64` and `1e-3` otherwise. The tolerance is keyed on the
+underlying floating-point type, so scalars, arrays, and dual numbers over the same element
+type get the same default. Used by [`find_zero`](@ref) when no tolerance is given.
 
 # Arguments
-- `FT`: The floating-point type of the iterates (e.g., `Float64`, `Float32`).
+- `FT`: The type of the iterates — a floating-point type, or an array/dual over one
+  (e.g., `Float64`, `Float32`, `Vector{Float64}`).
 
 # Returns
 - `AbstractTolerance`: A default tolerance object.
@@ -874,12 +880,9 @@ println("Default tolerance for Float64: ", tol)
 # Default tolerance for Float64: SolutionTolerance{Float64}(1e-4)
 ```
 """
-function default_tol(::Type{Float64})
-    return SolutionTolerance{Float64}(1e-4)
-end
-
 function default_tol(::Type{FT}) where {FT}
-    return SolutionTolerance{base_type(FT)}(1e-3)
+    BT = base_type(FT)
+    return SolutionTolerance{BT}(_default_tol_value(BT))
 end
 
 # Main entry point: Dispatch to specific method
@@ -1119,7 +1122,7 @@ end
     maxiters,
 )
     FT = typeof(x0)
-    if !isfinite(x0) || !isfinite(x1)
+    if (!isfinite(x0)) | (!isfinite(x1))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1149,6 +1152,7 @@ end
     lastside = 0
 
     local x, y
+    x_prev = x0 # previous iterate estimate, for the step-based convergence test
     for i in 1:maxiters
         x = update_x_rule(x0, y0, x1, y1)
         y = f(x)
@@ -1156,8 +1160,10 @@ end
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
 
-        # Check for convergence first (including exact root)
-        if tol(x0, x1, y)
+        # Converge on the change between successive estimates (and on an exact/near-exact
+        # root). The bracket width is not a reliable criterion for Regula Falsi, where one
+        # endpoint can stay fixed and the width never shrinks.
+        if tol(x_prev, x, y)
             return SolutionResults(soltype, x, true, y, i, x_history, y_history)
         end
 
@@ -1169,6 +1175,7 @@ end
         x0, x1, y0, y1 = x0_new, x1_new, y0_new, y1_new
 
         lastside = ifelse(is_neg, +1, -1)
+        x_prev = x
     end
 
     return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
@@ -1179,7 +1186,7 @@ end
 # inverse quadratic interpolation.
 @inline function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
     FT = typeof(x0)
-    if !isfinite(x0) || !isfinite(x1)
+    if (!isfinite(x0)) | (!isfinite(x1))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1205,10 +1212,12 @@ end
         )
     end
 
-    if abs(fa) < abs(fb)
-        a, b = b, a
-        fa, fb = fb, fa
-    end
+    cond_init_swap = abs(fa) < abs(fb)
+    a_init = ifelse(cond_init_swap, b, a)
+    b_init = ifelse(cond_init_swap, a, b)
+    fa_init = ifelse(cond_init_swap, fb, fa)
+    fb_init = ifelse(cond_init_swap, fa, fb)
+    a, b, fa, fb = a_init, b_init, fa_init, fb_init
 
     x_history = init_history(soltype, a)
     y_history = init_history(soltype, fa)
@@ -1222,7 +1231,7 @@ end
 
     for i in 1:maxiters
         # Convergence check
-        if (tol(a, b, fb)) || (fb == 0)
+        if tol(a, b, fb) | (fb == 0)
             return SolutionResults(
                 soltype,
                 b,
@@ -1252,7 +1261,7 @@ end
 
         # If step is not acceptable, fall back to bisection
         use_bisection =
-            (!s_is_between) || (abs(s - b) >= abs(e / 2)) || (abs(e) < eps(FT))
+            (!s_is_between) | (abs(s - b) >= abs(e / 2)) | (abs(e) < eps(FT))
 
         s_new = ifelse(use_bisection, (a + b) / 2, s)
         d_new = s_new - b
@@ -1296,7 +1305,7 @@ end
 # Internal function implementing the Secant method, an open, two-point method.
 @inline function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
     FT = typeof(x0)
-    if !isfinite(x0) || !isfinite(x1)
+    if (!isfinite(x0)) | (!isfinite(x1))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1395,21 +1404,24 @@ end
     c = FT(1e-4) # Conservative Armijo constant
     for i in 1:maxiters
 
-        # Fallback to secant method when derivative is too small
-        if abs(y′) <= FT(1e-5)
-            x_pert = x + (iszero(x) ? sqrt(eps(FT)) : x * sqrt(eps(FT)))
-            # Note: History is lost on fallback for VerboseSolution 
-            return _find_zero_secant(
-                f_value_only,
-                x,
-                x_pert,
-                soltype,
-                tol,
-                maxiters - i,
-            )
-        end
-
         Δx = y / y′ # Full Newton step
+
+        # On a breakdown of the Newton step — a zero, subnormal, or non-finite
+        # derivative that makes `Δx` non-finite — fall back to a secant-style step
+        # built from a finite-difference slope over a small perturbation. Finite-but-
+        # small derivatives are handled by the step limiting and line search below.
+        # The fallback is computed inline, in the same loop, which keeps the kernel a
+        # single iteration loop (lower register pressure and higher occupancy when
+        # broadcast on the GPU).
+        if !isfinite(Δx)
+            # Relative perturbation, scale-invariant for normal `x`. Floor it to
+            # `sqrt(eps)` only if `x * sqrt(eps)` vanishes (x == 0, or x so subnormal
+            # the product underflows), which would otherwise give a zero/NaN slope.
+            h = x * sqrt(eps(FT))
+            h = ifelse(iszero(h), sqrt(eps(FT)), h)
+            slope = (f_value_only(x + h) - y) / h
+            Δx = y / slope
+        end
 
         # --- Step Limiting for Robustness ---
         max_step = FT(20) * (abs(x) + sqrt(eps(FT)))
@@ -1421,9 +1433,12 @@ end
         y_new = f_value_only(x_new)
         max_backtrack = 5
         j = 0
+        # Keep backtracking while the trial point is unacceptable — either non-finite
+        # or an insufficient decrease in `|f|` — and the step is not yet negligible.
+        # A non-finite trial must *continue* the search (shrink `α`), not stop it, so
+        # that a step overshooting into a non-finite region can recover.
         while j < max_backtrack && (
-            isfinite(y_new) &
-            (abs(y_new) > abs(y) * (FT(1) - c * α)) &
+            ((!isfinite(y_new)) | (abs(y_new) > abs(y) * (FT(1) - c * α))) &
             (α > eps(FT))
         )
             α /= 2
