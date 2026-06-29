@@ -1414,7 +1414,11 @@ end
         # single iteration loop (lower register pressure and higher occupancy when
         # broadcast on the GPU).
         if !isfinite(Δx)
-            h = ifelse(iszero(x), sqrt(eps(FT)), x * sqrt(eps(FT)))
+            # Relative perturbation, scale-invariant for normal `x`. Floor it to
+            # `sqrt(eps)` only if `x * sqrt(eps)` vanishes (x == 0, or x so subnormal
+            # the product underflows), which would otherwise give a zero/NaN slope.
+            h = x * sqrt(eps(FT))
+            h = ifelse(iszero(h), sqrt(eps(FT)), h)
             slope = (f_value_only(x + h) - y) / h
             Δx = y / slope
         end
