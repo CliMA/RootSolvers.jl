@@ -39,7 +39,7 @@ RootSolvers.jl is a small, focused package providing numerical methods for findi
 - For package tests, prefer `Pkg.test()` over manually `include`ing `test/runtests.jl`, so test-only dependencies load through the package test path. GPU tests run via `julia --project=. test/runtests.jl CuArray`.
 - Match existing style: explicit names, narrow imports, comments that explain *why*.
 - Docstrings follow [docs/dev-guides/code-quality/documentation_policy.md](docs/dev-guides/code-quality/documentation_policy.md): an indented signature line, single-`#` section headings in plural standard form (`# Arguments`, `# Returns`, `# Fields`, `# Examples`, `# Notes`), and `[`name`](@ref)` cross-references for every type/function mentioned.
-- Run `julia -e 'using JuliaFormatter; format(".")'` before committing code (config in `.JuliaFormatter.toml`, margin 92).
+- Run `julia -e 'using Pkg; Pkg.add(name="JuliaFormatter", version="2.10.1"); using JuliaFormatter; format(".")'` before committing code (config in `.JuliaFormatter.toml`, margin 92, JuliaFormatter pinned to v2.10.1).
 
 ## Self-correction
 
