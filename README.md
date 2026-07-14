@@ -8,24 +8,32 @@ A high-performance root solver package with GPU support and broadcasting across 
 
 RootSolvers.jl provides robust, efficient numerical methods for finding roots of nonlinear equations. It supports broadcasting across abstract types including GPU arrays and custom field types, making it ideal for high-performance computing applications in climate modeling, machine learning, and scientific computing.
 
-|                           |                                                                          |
-|--------------------------:|:-------------------------------------------------------------------------|
-| **Stable Release**        | [![stable][stable-img]][stable-url] [![docs-stable][docs-stable-img]][docs-stable-url] |
-| **Latest Documentation**  | [![dev][docs-latest-img]][docs-latest-url]                                |
-| **Unit Tests**            | [![unit tests][unit-tests-img]][unit-tests-url] [![codecov][codecov-img]][codecov-url] |
-| **Downloads**             | [![Downloads][dlt-img]][dlt-url]                                          |
+|||
+|------------------:|:------------------------------------------------------------|
+| **Documentation** | [![stable][docs-stable-img]][docs-stable-url] [![dev][docs-dev-img]][docs-dev-url] |
+| **Version**       | [![version][version-img]][version-url]                      |
+| **License**       | [![license][license-img]][license-url]                      |
+| **Tests**         | [![gha ci][gha-ci-img]][gha-ci-url] [![buildkite][bk-ci-img]][bk-ci-url] |
+| **Code Coverage** | [![codecov][codecov-img]][codecov-url]                      |
+| **Downloads**     | [![Downloads][dlt-img]][dlt-url]                            |
 
-[docs-latest-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-latest-url]: https://CliMA.github.io/RootSolvers.jl/dev/
-
-[stable-img]: https://img.shields.io/github/v/release/CliMA/RootSolvers.jl?label=stable
-[stable-url]: https://github.com/CliMA/RootSolvers.jl/releases/latest
-
-[docs-stable-img]: https://img.shields.io/badge/docs-stable-green.svg
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
 [docs-stable-url]: https://CliMA.github.io/RootSolvers.jl/stable/
 
-[unit-tests-img]: https://github.com/CliMA/RootSolvers.jl/actions/workflows/OS-UnitTests.yml/badge.svg
-[unit-tests-url]: https://github.com/CliMA/RootSolvers.jl/actions/workflows/OS-UnitTests.yml
+[docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-dev-url]: https://CliMA.github.io/RootSolvers.jl/dev/
+
+[version-img]: https://juliahub.com/docs/General/RootSolvers/stable/version.svg
+[version-url]: https://juliahub.com/ui/Packages/General/RootSolvers
+
+[license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
+[license-url]: https://github.com/CliMA/RootSolvers.jl/blob/main/LICENSE
+
+[gha-ci-img]: https://github.com/CliMA/RootSolvers.jl/actions/workflows/OS-UnitTests.yml/badge.svg
+[gha-ci-url]: https://github.com/CliMA/RootSolvers.jl/actions/workflows/OS-UnitTests.yml
+
+[bk-ci-img]: https://badge.buildkite.com/a1adc87fee91767e80a581176c8dec4f73055455d2e94c8147.svg?branch=main
+[bk-ci-url]: https://buildkite.com/clima/rootsolvers-ci/builds?branch=main
 
 [codecov-img]: https://codecov.io/gh/CliMA/RootSolvers.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/CliMA/RootSolvers.jl
