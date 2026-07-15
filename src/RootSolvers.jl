@@ -1473,7 +1473,7 @@ end
 
         # Update x and y values using the provided policy rules. The bracket is updated
         # before the convergence check so that a converged solution reports the tightest
-        # enclosing interval (relevant for `BracketedSolution` consumers).
+        # enclosing interval (relevant for `BracketedSolution` users).
         is_neg = y * y0 < 0
         x0_new = ifelse(is_neg, x0, x)
         x1_new = ifelse(is_neg, x, x1)
