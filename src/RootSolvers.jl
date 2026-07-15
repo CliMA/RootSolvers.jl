@@ -69,11 +69,12 @@ export find_zero,
 
 
 
-export SolutionType, CompactSolution, VerboseSolution
+export SolutionType, CompactSolution, VerboseSolution, BracketedSolution
 export ResidualTolerance,
     SolutionTolerance,
     RelativeSolutionTolerance,
-    RelativeOrAbsoluteSolutionTolerance
+    RelativeOrAbsoluteSolutionTolerance,
+    NoTolerance
 export method_args, value_deriv, default_tol
 
 import ForwardDiff
@@ -435,8 +436,18 @@ struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     "error of the root of the equation ``f(x^*) = 0`` per iteration"
     err_history::Vector{FT}
 end
-SolutionResults(soltype::VerboseSolution, args...) =
-    VerboseSolutionResults(args...)
+# Trailing arguments (the final two-point state passed by the two-point solvers for
+# `BracketedSolution`) are accepted and ignored.
+SolutionResults(
+    soltype::VerboseSolution,
+    root,
+    converged,
+    err,
+    iter,
+    root_history,
+    err_history,
+    args...,
+) = VerboseSolutionResults(root, converged, err, iter, root_history, err_history)
 
 function Base.show(io::IO, sol::VerboseSolutionResults{FT}) where {FT}
     color = sol.converged ? :green : :red
@@ -531,10 +542,126 @@ function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
     end
 end
 
+"""
+    BracketedSolution <: SolutionType
+
+A memory-efficient, GPU-compatible solution type that, in addition to the root and
+convergence status, returns the final state of the two working points of a two-point
+method: the endpoints `x0`, `x1` and their residuals `y0`, `y1`.
+
+Supported by the two-point methods ([`SecantMethod`](@ref), [`BisectionMethod`](@ref),
+[`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref)). For the bracketing methods, the final
+points bracket the root whenever a sign change was found (`y0 * y1 <= 0`); if the input
+interval contained no sign change, the returned points are the inputs themselves and
+`converged == false`. For `SecantMethod`, the points are the last two iterates (no
+bracketing guarantee).
+
+This solution type is intended for callers that implement their own convergence policy or
+post-processing on top of the solver, e.g., assessing convergence from the final bracket
+width after a fixed number of iterations (see [`NoTolerance`](@ref)), or sharpening the
+root with a final interpolation of the bracket at no extra residual evaluation.
+
+# Accessing Results
+The returned `BracketedSolutionResults` object contains the following fields:
+- `sol.root`: The found root value.
+- `sol.converged`: Boolean indicating if the method converged.
+- `sol.err`: Residual `f(root)` at the returned root.
+- `sol.x0`, `sol.x1`: Final positions of the two working points.
+- `sol.y0`, `sol.y1`: Residuals at `x0` and `x1`.
+
+# Examples
+```julia
+sol = find_zero(x -> x^2 - 4, RegulaFalsiMethod{Float64}(0.0, 3.0), BracketedSolution())
+width = abs(sol.x1 - sol.x0)  # final bracket width
+```
+"""
+struct BracketedSolution <: SolutionType end
+
+"""
+    BracketedSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+
+Results type for `BracketedSolution`: the root and convergence status plus the final
+two-point state `(x0, x1, y0, y1)` of the solver. 
+"""
+struct BracketedSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+    "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
+    root::XT
+    "indicates convergence"
+    converged::Bool
+    "residual ``f(x^*)`` at the returned root"
+    err::YT
+    "final position of the first working point"
+    x0::XT
+    "final position of the second working point"
+    x1::XT
+    "residual at `x0`"
+    y0::YT
+    "residual at `x1`"
+    y1::YT
+end
+
+function SolutionResults(
+    soltype::BracketedSolution,
+    root,
+    converged,
+    err,
+    iter,
+    root_history,
+    err_history,
+    x0,
+    x1,
+    y0,
+    y1,
+)
+    # The root can be promoted relative to the endpoints (e.g., positions promote to dual
+    # numbers through the residuals under automatic differentiation), so promote the
+    # position and residual field groups to common types.
+    px0, px1, proot = promote(x0, x1, root)
+    py0, py1, perr = promote(y0, y1, err)
+    return BracketedSolutionResults(proot, converged, perr, px0, px1, py0, py1)
+end
+
+# One-point methods do not carry a two-point state.
+SolutionResults(
+    soltype::BracketedSolution,
+    root,
+    converged,
+    err,
+    iter,
+    root_history,
+    err_history,
+) = throw(
+    ArgumentError(
+        "BracketedSolution requires a two-point method \
+         (SecantMethod, BisectionMethod, RegulaFalsiMethod, or BrentsMethod)",
+    ),
+)
+
+function Base.show(io::IO, sol::BracketedSolutionResults{XT}) where {XT}
+    color = sol.converged ? :green : :red
+    if get(io, :compact, false)
+        # compact printing within a vector or similar
+        printstyled(io, sol.root; color)
+    else
+        # standalone printing
+        status = sol.converged ? "converged" : "failed to converge"
+        println(io, "BracketedSolutionResults{$XT}:")
+        print(io, "├── Status: ")
+        printstyled(io, status; color)
+        println(io)
+        println(io, "├── Root: ", sol.root)
+        println(io, "├── Error: ", sol.err)
+        print(io, "└── Final points: x0 = ", sol.x0, ", x1 = ", sol.x1)
+        print(io, ", y0 = ", sol.y0, ", y1 = ", sol.y1)
+    end
+end
+
 init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
+init_history(::BracketedSolution, x) = nothing
 init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
 init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} = nothing
+init_history(::BracketedSolution, ::Type{FT}) where {FT <: Real} = nothing
 
 function push_history!(
     history::Vector{FT},
@@ -547,6 +674,13 @@ function push_history!(
     history::Nothing,
     x::FT,
     ::CompactSolution,
+) where {FT <: Real}
+    nothing
+end
+function push_history!(
+    history::Nothing,
+    x::FT,
+    ::BracketedSolution,
 ) where {FT <: Real}
     nothing
 end
@@ -741,6 +875,43 @@ on ``|(x2-x1)/x1| || |x2-x1|``
     (abs(y) < eps(typeof(y)))
 
 """
+    NoTolerance{FT}
+
+A criterion that forces the solver to run for exactly `maxiters` iterations, irrespective 
+of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where 
+a data-dependent early exit is undesirable.
+
+Callers can pair this with [`BracketedSolution`](@ref) and assess convergence
+themselves from the returned final state (e.g., from the bracket width
+`abs(sol.x1 - sol.x0)`).
+
+The type parameter `FT` is unused and exists only to satisfy the `AbstractTolerance{FT}`
+interface; the zero-argument constructor `NoTolerance()` is the intended entry point.
+
+!!! note
+    [`BrentsMethod`](@ref) retains an internal exact-zero exit (`f(x) == 0`) independent
+    of the tolerance, so only its iteration count — not its result — can become
+    data-dependent under `NoTolerance`.
+
+# Examples
+```julia
+# Run exactly 10 regula falsi iterations, then assess convergence from the bracket
+sol = find_zero(f, RegulaFalsiMethod{Float64}(0.0, 1.0), BracketedSolution(),
+                NoTolerance(), 10)
+converged = abs(sol.x1 - sol.x0) < 1e-3
+```
+"""
+struct NoTolerance{FT} <: AbstractTolerance{FT} end
+NoTolerance() = NoTolerance{Float64}()
+
+"""
+    (tol::NoTolerance)(x1, x2, y)
+
+Always returns `false`; see [`NoTolerance`](@ref).
+"""
+(tol::NoTolerance)(x1, x2, y) = false
+
+"""
     find_zero(f, method, soltype=CompactSolution(), tol=nothing, maxiters=1_000)
 
 Find a root of the scalar function `f` using the specified numerical method.
@@ -818,7 +989,12 @@ the GPU.
 The solution-based tolerances ([`SolutionTolerance`](@ref), [`RelativeSolutionTolerance`](@ref))
 measure the change between successive iterates, `|x_{n+1} - x_n|`, for every method, including the
 bracketing ones. Every tolerance also reports convergence once `|f(x)|` drops below the machine
-epsilon of the residual type.
+epsilon of the residual type (except [`NoTolerance`](@ref), which never reports convergence and
+runs exactly `maxiters` iterations).
+
+For the two-point methods, the endpoint residuals can be passed pre-evaluated
+(`find_zero(f, MethodType, x0, x1, y0, y1, ...)`) to avoid re-evaluating `f` at endpoints the
+caller has already probed (e.g., during a bracket search).
 
 # Batch and GPU Root-Finding (Broadcasting)
 
@@ -989,7 +1165,49 @@ function find_zero(
     tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT <: FTypes, M <: SecantMethod}
-    return _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
+    y0, y1 = _eval_endpoints(f, x0, x1)
+    return _find_zero_secant(f, x0, x1, y0, y1, soltype, tol, maxiters)
+end
+
+"""
+    find_zero(f, method_type::Type{<:RootSolvingMethod}, x0, x1, y0, y1,
+              [soltype, tol, maxiters])
+
+Find a root of `f` with a two-point method, starting from endpoints `x0`, `x1` whose
+residuals `y0 = f(x0)` and `y1 = f(x1)` have already been evaluated by the caller.
+
+This form skips the solver's own initial endpoint evaluations, so the total number of
+residual evaluations is just the number of iterations performed. It is intended for
+callers that have already probed the function while locating a bracket (e.g., scanning a
+physical parameter range for a sign change) and want to reuse those values instead of
+carrying out two redundant evaluations per solve.
+
+Supported for the two-point methods: [`SecantMethod`](@ref), [`BisectionMethod`](@ref),
+[`RegulaFalsiMethod`](@ref), and [`BrentsMethod`](@ref). The caller is responsible for
+`y0`, `y1` actually being the residuals at `x0`, `x1`; for the bracketing methods, an
+input pair without a sign change (`y0 * y1 >= 0`) returns `converged = false` with the
+smaller-residual endpoint as the root, exactly like the standard form.
+
+# Examples
+```julia
+f(x) = x^2 - 4
+x0, x1 = 0.0, 3.0
+y0, y1 = f(x0), f(x1)   # already evaluated during bracket search
+sol = find_zero(f, RegulaFalsiMethod, x0, x1, y0, y1)
+```
+"""
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    x1::FT,
+    y0::YT,
+    y1::YT,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT <: FTypes, YT <: FTypes, M <: SecantMethod}
+    return _find_zero_secant(f, x0, x1, y0, y1, soltype, tol, maxiters)
 end
 
 @inline method_args(method::BisectionMethod) = (method.x0, method.x1)
@@ -1002,12 +1220,40 @@ function find_zero(
     tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BisectionMethod}
+    y0, y1 = _eval_endpoints(f, x0, x1)
     return _find_zero_bracketed(
         f,
         _bisection_rule,
         _bisection_y_update,
         x0,
         x1,
+        y0,
+        y1,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    x1::FT,
+    y0::YT,
+    y1::YT,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT <: FTypes, YT <: FTypes, M <: BisectionMethod}
+    return _find_zero_bracketed(
+        f,
+        _bisection_rule,
+        _bisection_y_update,
+        x0,
+        x1,
+        y0,
+        y1,
         soltype,
         tol,
         maxiters,
@@ -1024,12 +1270,40 @@ function find_zero(
     tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: RegulaFalsiMethod}
+    y0, y1 = _eval_endpoints(f, x0, x1)
     return _find_zero_bracketed(
         f,
         _regula_falsi_rule,
         _regula_falsi_y_update,
         x0,
         x1,
+        y0,
+        y1,
+        soltype,
+        tol,
+        maxiters,
+    )
+end
+
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    x1::FT,
+    y0::YT,
+    y1::YT,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT <: FTypes, YT <: FTypes, M <: RegulaFalsiMethod}
+    return _find_zero_bracketed(
+        f,
+        _regula_falsi_rule,
+        _regula_falsi_y_update,
+        x0,
+        x1,
+        y0,
+        y1,
         soltype,
         tol,
         maxiters,
@@ -1046,7 +1320,22 @@ function find_zero(
     tol::AbstractTolerance = default_tol(FT),
     maxiters::Int = 1_000,
 ) where {F <: Function, FT, M <: BrentsMethod}
-    return _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
+    y0, y1 = _eval_endpoints(f, x0, x1)
+    return _find_zero_brent(f, x0, x1, y0, y1, soltype, tol, maxiters)
+end
+
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    x1::FT,
+    y0::YT,
+    y1::YT,
+    soltype::SolutionType = CompactSolution(),
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT <: FTypes, YT <: FTypes, M <: BrentsMethod}
+    return _find_zero_brent(f, x0, x1, y0, y1, soltype, tol, maxiters)
 end
 
 @inline method_args(method::NewtonsMethodAD) = (method.x0,)
@@ -1084,6 +1373,17 @@ end
 #### Method-specific helper functions
 ####
 
+# Evaluate the residuals at both endpoints for the standard (non-pre-evaluated) entry
+# points. Non-finite endpoints are not passed to `f`; the sentinel `Inf` residuals make
+# the kernels' input guards return a failed solution instead.
+@inline function _eval_endpoints(f::F, x0, x1) where {F}
+    if (!isfinite(x0)) | (!isfinite(x1))
+        FT = typeof(x0)
+        return FT(Inf), FT(Inf)
+    end
+    return f(x0), f(x1)
+end
+
 # --- Rules for calculating the next `x` value ---
 
 # Update rule for Bisection method: `x` is the midpoint.
@@ -1109,28 +1409,32 @@ end
 )
 
 
-# Internal function implementing the core bracketing algorithm used by bisection, 
-# Regula Falsi, and other bracketing methods.
+# Internal function implementing the core bracketing algorithm used by bisection,
+# Regula Falsi, and other bracketing methods. The endpoint residuals `y0`, `y1` are
+# supplied by the caller (either pre-evaluated by the user or computed by the standard
+# `find_zero` entry points via `_eval_endpoints`).
 @inline function _find_zero_bracketed(
     f,
     update_x_rule,
     update_y_rule,
     x0,
     x1,
+    y0,
+    y1,
     soltype,
     tol,
     maxiters,
 )
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1))
+    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
-        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
+        return SolutionResults(
+            soltype, x0, false, y, 0, x_history, y_history, x0, x1, y0, y1,
+        )
     end
 
-    y0 = f(x0)
-    y1 = f(x1)
     if y0 * y1 >= 0
         # Return failed solution instead of error for GPU compatibility.
         # Pick the endpoint with the smaller residual as the best guess.
@@ -1144,6 +1448,10 @@ end
             0,
             x_history,
             y_history,
+            x0,
+            x1,
+            y0,
+            y1,
         )
     end
 
@@ -1151,7 +1459,10 @@ end
     y_history = init_history(soltype, y0)
     lastside = 0
 
-    local x, y
+    # Best point so far: the smaller-residual endpoint. This is also the (well-defined)
+    # returned root when `maxiters <= 0`.
+    x = ifelse(abs(y0) < abs(y1), x0, x1)
+    y = ifelse(abs(y0) < abs(y1), y0, y1)
     x_prev = x0 # previous iterate estimate, for the step-based convergence test
     for i in 1:maxiters
         x = update_x_rule(x0, y0, x1, y1)
@@ -1160,14 +1471,9 @@ end
         push_history!(x_history, x, soltype)
         push_history!(y_history, y, soltype)
 
-        # Converge on the change between successive estimates (and on an exact/near-exact
-        # root). The bracket width is not a reliable criterion for Regula Falsi, where one
-        # endpoint can stay fixed and the width never shrinks.
-        if tol(x_prev, x, y)
-            return SolutionResults(soltype, x, true, y, i, x_history, y_history)
-        end
-
-        # Update x and y values using the provided policy rules
+        # Update x and y values using the provided policy rules. The bracket is updated
+        # before the convergence check so that a converged solution reports the tightest
+        # enclosing interval (relevant for `BracketedSolution` consumers).
         is_neg = y * y0 < 0
         x0_new = ifelse(is_neg, x0, x)
         x1_new = ifelse(is_neg, x, x1)
@@ -1175,26 +1481,42 @@ end
         x0, x1, y0, y1 = x0_new, x1_new, y0_new, y1_new
 
         lastside = ifelse(is_neg, +1, -1)
+
+        # Converge on the change between successive estimates (and on an exact/near-exact
+        # root). The bracket width is not a reliable criterion for Regula Falsi, where one
+        # endpoint can stay fixed and the width never shrinks.
+        if tol(x_prev, x, y)
+            return SolutionResults(
+                soltype, x, true, y, i, x_history, y_history, x0, x1, y0, y1,
+            )
+        end
+
         x_prev = x
     end
 
-    return SolutionResults(soltype, x, false, y, maxiters, x_history, y_history)
+    return SolutionResults(
+        soltype, x, false, y, maxiters, x_history, y_history, x0, x1, y0, y1,
+    )
 end
 
 
-# Internal function implementing Brent's method, which combines bisection, secant, and 
-# inverse quadratic interpolation.
-@inline function _find_zero_brent(f, x0, x1, soltype, tol, maxiters)
+# Internal function implementing Brent's method, which combines bisection, secant, and
+# inverse quadratic interpolation. The endpoint residuals are supplied by the caller
+# (either pre-evaluated by the user or computed by the standard `find_zero` entry points
+# via `_eval_endpoints`).
+@inline function _find_zero_brent(f, x0, x1, fa0, fb0, soltype, tol, maxiters)
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1))
+    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(fa0)) | (!isfinite(fb0))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
-        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
+        return SolutionResults(
+            soltype, x0, false, y, 0, x_history, y_history, x0, x1, fa0, fb0,
+        )
     end
 
     a, b = x0, x1
-    fa, fb = f(a), f(b)
+    fa, fb = fa0, fb0
 
     if fa * fb >= 0
         # Return failed solution instead of error for GPU compatibility.
@@ -1209,6 +1531,10 @@ end
             0,
             x_history,
             y_history,
+            a,
+            b,
+            fa,
+            fb,
         )
     end
 
@@ -1240,6 +1566,10 @@ end
                 i,
                 x_history,
                 y_history,
+                a,
+                b,
+                fa,
+                fb,
             )
         end
 
@@ -1299,21 +1629,26 @@ end
         maxiters,
         x_history,
         y_history,
+        a,
+        b,
+        fa,
+        fb,
     )
 end
 
-# Internal function implementing the Secant method, an open, two-point method.
-@inline function _find_zero_secant(f, x0, x1, soltype, tol, maxiters)
+# Internal function implementing the Secant method, an open, two-point method. The
+# endpoint residuals `y0`, `y1` are supplied by the caller (either pre-evaluated by the
+# user or computed by the standard `find_zero` entry points via `_eval_endpoints`).
+@inline function _find_zero_secant(f, x0, x1, y0, y1, soltype, tol, maxiters)
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1))
+    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
-        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
+        return SolutionResults(
+            soltype, x0, false, y, 0, x_history, y_history, x0, x1, y0, y1,
+        )
     end
-
-    y0 = f(x0)
-    y1 = f(x1)
 
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
@@ -1334,6 +1669,10 @@ end
                 i,
                 x_history,
                 y_history,
+                x0,
+                x1,
+                y0,
+                y1,
             )
         end
 
@@ -1358,6 +1697,10 @@ end
                 i,
                 x_history,
                 y_history,
+                x0,
+                x1,
+                y0,
+                y1,
             )
         end
     end
@@ -1370,6 +1713,10 @@ end
         maxiters,
         x_history,
         y_history,
+        x0,
+        x1,
+        y0,
+        y1,
     )
 end
 

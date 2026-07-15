@@ -50,16 +50,19 @@ NewtonsMethod
 
 These types control the level of detail in the output returned by `find_zero`.
 
-| Solution Type             | Features                            | Best For                                     |
-|:--------------------------|:------------------------------------|:---------------------------------------------|
-| [`CompactSolution`](@ref) | Minimal output, GPU-friendly        | **High-performance**, GPU, memory efficiency |
-| [`VerboseSolution`](@ref) | Full diagnostics, iteration history | **Debugging**, analysis, CPU                 |
+| Solution Type               | Features                                  | Best For                                       |
+|:----------------------------|:------------------------------------------|:------------------------------------------------|
+| [`CompactSolution`](@ref)   | Minimal output, GPU-friendly              | **High-performance**, GPU, memory efficiency   |
+| [`VerboseSolution`](@ref)   | Full diagnostics, iteration history       | **Debugging**, analysis, CPU                   |
+| [`BracketedSolution`](@ref) | Final two-point state, GPU-friendly       | **Caller-side convergence policies**, two-point methods |
 
 ```@docs
 CompactSolution
 VerboseSolution
+BracketedSolution
 CompactSolutionResults
 VerboseSolutionResults
+BracketedSolutionResults
 ```
 
 ---
@@ -74,6 +77,7 @@ Tolerance types define the convergence criteria for the solver.
 | [`ResidualTolerance`](@ref)                   | `abs(f(x))`           | When you want the function value near **zero** |
 | [`RelativeSolutionTolerance`](@ref)           | `abs((x₂ - x₁)/x₁)`   | When root magnitude **varies widely**          |
 | [`RelativeOrAbsoluteSolutionTolerance`](@ref) | Relative or Absolute  | **Robust** for both small and large roots      |
+| [`NoTolerance`](@ref)                         | Never converges       | **Fixed-iteration** (GPU-uniform) workloads    |
 
 ```@docs
 AbstractTolerance
@@ -81,6 +85,7 @@ SolutionTolerance
 ResidualTolerance
 RelativeSolutionTolerance
 RelativeOrAbsoluteSolutionTolerance
+NoTolerance
 ```
 
 ---
