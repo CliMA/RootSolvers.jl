@@ -11,7 +11,7 @@ v1.1.0
   if they were already evaluated by the caller (e.g. while scanning for a bracket), they
   can be reused, avoiding redundant function evaluations. Supported for `SecantMethod`,
   `BisectionMethod`, `RegulaFalsiMethod`, and `BrentsMethod`.
-- Added `BracketedSolution`, a GPU-compatible solution type that additionally returns the
+- Added `TwoPointSolution`, a GPU-compatible solution type that additionally returns the
   final two-point state `(x0, x1, y0, y1)` of the solver, enabling caller-side convergence
   checks and post-processing.
 - Added `NoTolerance`, a convergence criterion to force the solver to run for exactly
@@ -19,10 +19,9 @@ v1.1.0
   work in fixed-iteration GPU workloads.
 - In the shared bracketing kernel (bisection/regula falsi), a converged solution now
   reports the bracket state *after* incorporating the accepted iterate (relevant only for
-  `BracketedSolution`); returned roots and convergence flags are unchanged.
-- Fixed an `UndefVarError` in the bracketing methods when called with `maxiters <= 0`;
-  they now return the smaller-residual endpoint with `converged = false` (or as assessed
-  by the tolerance).
+  `TwoPointSolution`); returned roots and convergence flags are unchanged.
+- Fixed an `UndefVarError` in the bracketing methods when called with `maxiters = 0`
+  (or negative, which shouldn't be used); they now return the smaller-residual endpoint with `converged = false` (or as assessed by the tolerance).
 
 v1.0.3
 -------

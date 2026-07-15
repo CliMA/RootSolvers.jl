@@ -69,7 +69,7 @@ export find_zero,
 
 
 
-export SolutionType, CompactSolution, VerboseSolution, BracketedSolution
+export SolutionType, CompactSolution, VerboseSolution, TwoPointSolution
 export ResidualTolerance,
     SolutionTolerance,
     RelativeSolutionTolerance,
@@ -437,7 +437,7 @@ struct VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
     err_history::Vector{FT}
 end
 # Trailing arguments (the final two-point state passed by the two-point solvers for
-# `BracketedSolution`) are accepted and ignored.
+# `TwoPointSolution`) are accepted and ignored.
 SolutionResults(
     soltype::VerboseSolution,
     root,
@@ -543,7 +543,7 @@ function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
 end
 
 """
-    BracketedSolution <: SolutionType
+    TwoPointSolution <: SolutionType
 
 A memory-efficient, GPU-compatible solution type that, in addition to the root and
 convergence status, returns the final state of the two working points of a two-point
@@ -562,28 +562,35 @@ width after a fixed number of iterations (see [`NoTolerance`](@ref)), or sharpen
 root with a final interpolation of the bracket at no extra residual evaluation.
 
 # Accessing Results
-The returned `BracketedSolutionResults` object contains the following fields:
+The returned `TwoPointSolutionResults` object contains the following fields:
 - `sol.root`: The found root value.
 - `sol.converged`: Boolean indicating if the method converged.
 - `sol.err`: Residual `f(root)` at the returned root.
 - `sol.x0`, `sol.x1`: Final positions of the two working points.
 - `sol.y0`, `sol.y1`: Residuals at `x0` and `x1`.
 
+!!! note
+    `y0`, `y1` are the solver's working residuals. For [`RegulaFalsiMethod`](@ref), the
+    Illinois stagnation fix may have halved a retained endpoint's residual, so they can
+    differ from `f(x0)`, `f(x1)` by a power of 2 (sign preserved). These are the values
+    the method itself would use in its next interpolation step; re-evaluate `f` if exact
+    residuals are required.
+
 # Examples
 ```julia
-sol = find_zero(x -> x^2 - 4, RegulaFalsiMethod{Float64}(0.0, 3.0), BracketedSolution())
+sol = find_zero(x -> x^2 - 4, RegulaFalsiMethod{Float64}(0.0, 3.0), TwoPointSolution())
 width = abs(sol.x1 - sol.x0)  # final bracket width
 ```
 """
-struct BracketedSolution <: SolutionType end
+struct TwoPointSolution <: SolutionType end
 
 """
-    BracketedSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+    TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
 
-Results type for `BracketedSolution`: the root and convergence status plus the final
+Results type for `TwoPointSolution`: the root and convergence status plus the final
 two-point state `(x0, x1, y0, y1)` of the solver. 
 """
-struct BracketedSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+struct TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::XT
     "indicates convergence"
@@ -601,7 +608,7 @@ struct BracketedSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
 end
 
 function SolutionResults(
-    soltype::BracketedSolution,
+    soltype::TwoPointSolution,
     root,
     converged,
     err,
@@ -618,12 +625,12 @@ function SolutionResults(
     # position and residual field groups to common types.
     px0, px1, proot = promote(x0, x1, root)
     py0, py1, perr = promote(y0, y1, err)
-    return BracketedSolutionResults(proot, converged, perr, px0, px1, py0, py1)
+    return TwoPointSolutionResults(proot, converged, perr, px0, px1, py0, py1)
 end
 
 # One-point methods do not carry a two-point state.
 SolutionResults(
-    soltype::BracketedSolution,
+    soltype::TwoPointSolution,
     root,
     converged,
     err,
@@ -632,12 +639,12 @@ SolutionResults(
     err_history,
 ) = throw(
     ArgumentError(
-        "BracketedSolution requires a two-point method \
+        "TwoPointSolution requires a two-point method \
          (SecantMethod, BisectionMethod, RegulaFalsiMethod, or BrentsMethod)",
     ),
 )
 
-function Base.show(io::IO, sol::BracketedSolutionResults{XT}) where {XT}
+function Base.show(io::IO, sol::TwoPointSolutionResults{XT}) where {XT}
     color = sol.converged ? :green : :red
     if get(io, :compact, false)
         # compact printing within a vector or similar
@@ -645,7 +652,7 @@ function Base.show(io::IO, sol::BracketedSolutionResults{XT}) where {XT}
     else
         # standalone printing
         status = sol.converged ? "converged" : "failed to converge"
-        println(io, "BracketedSolutionResults{$XT}:")
+        println(io, "TwoPointSolutionResults{$XT}:")
         print(io, "├── Status: ")
         printstyled(io, status; color)
         println(io)
@@ -658,10 +665,10 @@ end
 
 init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
-init_history(::BracketedSolution, x) = nothing
+init_history(::TwoPointSolution, x) = nothing
 init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
 init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} = nothing
-init_history(::BracketedSolution, ::Type{FT}) where {FT <: Real} = nothing
+init_history(::TwoPointSolution, ::Type{FT}) where {FT <: Real} = nothing
 
 function push_history!(
     history::Vector{FT},
@@ -680,7 +687,7 @@ end
 function push_history!(
     history::Nothing,
     x::FT,
-    ::BracketedSolution,
+    ::TwoPointSolution,
 ) where {FT <: Real}
     nothing
 end
@@ -881,9 +888,12 @@ A criterion that forces the solver to run for exactly `maxiters` iterations, irr
 of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where 
 a data-dependent early exit is undesirable.
 
-Callers can pair this with [`BracketedSolution`](@ref) and assess convergence
-themselves from the returned final state (e.g., from the bracket width
-`abs(sol.x1 - sol.x0)`).
+Callers assess convergence themselves from the returned state. On the GPU, pair it with
+[`TwoPointSolution`](@ref) (`isbits`, non-allocating) and check the bracket width
+`abs(sol.x1 - sol.x0)`, or with [`CompactSolution`](@ref) and re-evaluate `f(sol.root)`.
+On the CPU, [`VerboseSolution`](@ref) gives the richest picture — the final residual
+`sol.err` and the full `sol.root_history`/`sol.err_history` — but allocates, so it is
+CPU-only.
 
 The type parameter `FT` is unused and exists only to satisfy the `AbstractTolerance{FT}`
 interface; the zero-argument constructor `NoTolerance()` is the intended entry point.
@@ -895,8 +905,12 @@ interface; the zero-argument constructor `NoTolerance()` is the intended entry p
 
 # Examples
 ```julia
-# Run exactly 10 regula falsi iterations, then assess convergence from the bracket
-sol = find_zero(f, RegulaFalsiMethod{Float64}(0.0, 1.0), BracketedSolution(),
+# Fixed-cost GPU-style solve: endpoint residuals already known from a bracket
+# search, exactly 10 regula falsi iterations (10 residual evaluations, no
+# data-dependent exit), convergence assessed by the caller from the bracket width
+x0, x1 = 0.0, 1.0
+y0, y1 = f(x0), f(x1)   # evaluated while locating the bracket
+sol = find_zero(f, RegulaFalsiMethod, x0, x1, y0, y1, TwoPointSolution(),
                 NoTolerance(), 10)
 converged = abs(sol.x1 - sol.x0) < 1e-3
 ```
@@ -933,11 +947,14 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
 - `soltype::`[`SolutionType`](@ref): Format of the returned solution (default: [`CompactSolution`](@ref)):
     - [`CompactSolution`](@ref): Returns only root and convergence status (GPU-compatible)
     - [`VerboseSolution`](@ref): Returns detailed diagnostics and iteration history (CPU-only)
+    - [`TwoPointSolution`](@ref): Additionally returns the final two-point state
+      `(x0, x1, y0, y1)` (two-point methods only; GPU-compatible)
 - `tol::Union{Nothing, AbstractTolerance}`: Convergence criterion. If `nothing` (default), uses [`SolutionTolerance`](@ref)`(1e-4)` for `Float64` or `1e-3` otherwise. Available tolerance types:
     - [`ResidualTolerance`](@ref): Based on `|f(x)|`
     - [`SolutionTolerance`](@ref): Based on `|x_{n+1} - x_n|`
     - [`RelativeSolutionTolerance`](@ref): Based on `|(x_{n+1} - x_n)/x_n|`
     - [`RelativeOrAbsoluteSolutionTolerance`](@ref): Combined relative and absolute tolerance
+    - [`NoTolerance`](@ref): Never converges; runs exactly `maxiters` iterations (fixed-iteration GPU workloads)
 - `maxiters::Int`: Maximum number of iterations allowed (default: 1,000)
 
 # Returns
@@ -945,6 +962,8 @@ supports various root-finding algorithms, tolerance criteria, and solution forma
   The exact type depends on the `soltype` parameter:
   - `CompactSolutionResults`: Contains `root` and `converged` fields
   - `VerboseSolutionResults`: Additionally contains `err`, `iter_performed`, and iteration history
+  - `TwoPointSolutionResults`: Contains `root`, `converged`, `err`, and the final
+    two-point state `x0`, `x1`, `y0`, `y1` (two-point methods only; see [`TwoPointSolution`](@ref))
 
 # Examples
 
@@ -1009,7 +1028,9 @@ x0 = CUDA.fill(1.0, 1000)  # 1000 initial guesses on the GPU
 sol = find_zero.(x -> x.^2 .- 2, SecantMethod, x0, x0 .+ 1, CompactSolution())
 ```
 
-This is especially useful for large-scale or batched root-finding on GPUs. Only [`CompactSolution`](@ref) is GPU-compatible.
+This is especially useful for large-scale or batched root-finding on GPUs. Only
+[`CompactSolution`](@ref) and [`TwoPointSolution`](@ref) are GPU-compatible
+([`VerboseSolution`](@ref) stores iteration history and is CPU-only).
 
 # Method Selection Guide
 - **BisectionMethod**: Simple general-purpose bracketing method, slow but guaranteed convergence
@@ -1021,8 +1042,8 @@ This is especially useful for large-scale or batched root-finding on GPUs. Only 
 
 # See Also
 - [`BisectionMethod`](@ref), [`SecantMethod`](@ref), [`RegulaFalsiMethod`](@ref), [`BrentsMethod`](@ref), [`NewtonsMethodAD`](@ref), [`NewtonsMethod`](@ref)
-- [`CompactSolution`](@ref), [`VerboseSolution`](@ref)
-- [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref)
+- [`CompactSolution`](@ref), [`VerboseSolution`](@ref), [`TwoPointSolution`](@ref)
+- [`ResidualTolerance`](@ref), [`SolutionTolerance`](@ref), [`NoTolerance`](@ref)
 """
 function find_zero end
 
@@ -1138,6 +1159,8 @@ The required `args...` depend on the specific `method_type` chosen:
   The exact type depends on the `soltype` parameter:
   - `CompactSolutionResults`: Contains `root` and `converged` fields
   - `VerboseSolutionResults`: Additionally contains `err`, `iter_performed`, and iteration history
+  - `TwoPointSolutionResults`: Contains `root`, `converged`, `err`, and the final
+    two-point state `x0`, `x1`, `y0`, `y1` (two-point methods only; see [`TwoPointSolution`](@ref))
 
 # Examples
 
@@ -1369,6 +1392,40 @@ function find_zero(
     return _find_zero_newton(f, x -> f(x)[1], x0, soltype, tol, maxiters)
 end
 
+# Fail fast for the one-point methods paired with `TwoPointSolution`: a one-point method
+# has no two-point state to report. These guards throw at dispatch, before any iteration,
+# rather than letting the solve run and hit the same error at result construction (the
+# `SolutionResults(::TwoPointSolution, ...)` backstop). One guard per one-point method,
+# each mirroring the `M` constraint of the method it shadows and narrowing only the
+# `soltype` argument (`TwoPointSolution` < `SolutionType`); a single `Union{...}` guard
+# would be more specific on `soltype` but less specific on `M`, and hence ambiguous.
+@inline _no_two_point_state() = throw(
+    ArgumentError(
+        "TwoPointSolution requires a two-point method \
+         (SecantMethod, BisectionMethod, RegulaFalsiMethod, or BrentsMethod)",
+    ),
+)
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    soltype::TwoPointSolution,
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT, M <: NewtonsMethodAD}
+    _no_two_point_state()
+end
+function find_zero(
+    f::F,
+    ::Type{M},
+    x0::FT,
+    soltype::TwoPointSolution,
+    tol::AbstractTolerance = default_tol(FT),
+    maxiters::Int = 1_000,
+) where {F <: Function, FT, M <: NewtonsMethod}
+    _no_two_point_state()
+end
+
 ####
 #### Method-specific helper functions
 ####
@@ -1473,7 +1530,7 @@ end
 
         # Update x and y values using the provided policy rules. The bracket is updated
         # before the convergence check so that a converged solution reports the tightest
-        # enclosing interval (relevant for `BracketedSolution` users).
+        # enclosing interval (relevant for `TwoPointSolution` users).
         is_neg = y * y0 < 0
         x0_new = ifelse(is_neg, x0, x)
         x1_new = ifelse(is_neg, x, x1)

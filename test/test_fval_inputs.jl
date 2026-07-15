@@ -1,5 +1,5 @@
 # Tests for pre-evaluated endpoint residuals (`find_zero(f, M, x0, x1, y0, y1, ...)`),
-# the `BracketedSolution` solution type, the `NoTolerance` criterion, and the
+# the `TwoPointSolution` solution type, the `NoTolerance` criterion, and the
 # `maxiters <= 0` endpoint behavior of the two-point methods.
 
 const TWO_POINT_METHODS =
@@ -71,47 +71,90 @@ end
     end
 end
 
-@testset "BracketedSolution final state" begin
+@testset "TwoPointSolution final state" begin
     for FT in (Float32, Float64)
         f(x) = x^2 - FT(4)
         x0, x1 = FT(0), FT(3)
 
         for M in BRACKETING_METHODS
-            sol = find_zero(f, M, x0, x1, f(x0), f(x1), BracketedSolution())
-            @test sol isa RootSolvers.BracketedSolutionResults
+            sol = find_zero(f, M, x0, x1, f(x0), f(x1), TwoPointSolution())
+            @test sol isa RootSolvers.TwoPointSolutionResults
             @test isbits(sol)
             @test sol.converged === true
-            # The final points must still bracket the root, contain it, and carry
-            # consistent residuals.
+            # The final points must still bracket the root and contain it.
             @test sol.y0 * sol.y1 <= 0
             @test min(sol.x0, sol.x1) <= sol.root <= max(sol.x0, sol.x1)
-            @test sol.y0 === f(sol.x0)
-            @test sol.y1 === f(sol.x1)
             @test sol.err === f(sol.root)
+            # Residual consistency: bisection and Brent report the residuals as
+            # evaluated, but regula falsi's Illinois stagnation fix may have halved
+            # a retained endpoint's residual (sign and significand preserved, only
+            # the exponent reduced), so assert the invariant that survives damping.
+            for (xi, yi) in ((sol.x0, sol.y0), (sol.x1, sol.y1))
+                if M <: RegulaFalsiMethod
+                    @test significand(yi) === significand(f(xi))
+                    @test abs(yi) <= abs(f(xi))
+                else
+                    @test yi === f(xi)
+                end
+            end
 
             # No sign change: inputs are returned unchanged with converged = false.
-            sol_ns = find_zero(f, M, FT(3), FT(5), f(FT(3)), f(FT(5)), BracketedSolution())
+            sol_ns = find_zero(f, M, FT(3), FT(5), f(FT(3)), f(FT(5)), TwoPointSolution())
             @test sol_ns.converged === false
             @test (sol_ns.x0, sol_ns.x1) === (FT(3), FT(5))
             @test sol_ns.root === FT(3) # smaller-residual endpoint
         end
 
+        # Regula falsi with Illinois damping actually engaged: a strongly convex
+        # residual stagnates one-sided, so the retained endpoint's reported
+        # residual is a halved f value, not f itself.
+        f_convex(x) = x^10 - FT(1)
+        sol_ill = find_zero(
+            f_convex, RegulaFalsiMethod, FT(0), FT(1.3),
+            f_convex(FT(0)), f_convex(FT(1.3)),
+            TwoPointSolution(), NoTolerance(), 8,
+        )
+        @test sol_ill.y0 * sol_ill.y1 <= 0
+        @test min(sol_ill.x0, sol_ill.x1) <=
+              sol_ill.root <=
+              max(sol_ill.x0, sol_ill.x1)
+        damped =
+            (sol_ill.y0 !== f_convex(sol_ill.x0)) |
+            (sol_ill.y1 !== f_convex(sol_ill.x1))
+        @test damped # this case must exercise the Illinois fix
+        for (xi, yi) in ((sol_ill.x0, sol_ill.y0), (sol_ill.x1, sol_ill.y1))
+            @test significand(yi) === significand(f_convex(xi))
+            @test abs(yi) <= abs(f_convex(xi))
+        end
+
         # Secant: the two points are the last iterates (no bracketing guarantee).
-        sol_sec = find_zero(f, SecantMethod, x0, x1, f(x0), f(x1), BracketedSolution())
+        sol_sec = find_zero(f, SecantMethod, x0, x1, f(x0), f(x1), TwoPointSolution())
         @test sol_sec.converged === true
         @test sol_sec.root === sol_sec.x1
 
-        # One-point methods do not carry a two-point state.
+        # One-point methods do not carry a two-point state: pairing them with
+        # TwoPointSolution throws.
         @test_throws ArgumentError find_zero(
-            f, NewtonsMethodAD{FT}(FT(1)), BracketedSolution(),
+            f, NewtonsMethodAD{FT}(FT(1)), TwoPointSolution(),
         )
+        @test_throws ArgumentError find_zero(
+            x -> (f(x), 2x), NewtonsMethod{FT}(FT(1)), TwoPointSolution(),
+        )
+        # The guard fails fast, at dispatch, before evaluating `f` at all (rather
+        # than running the full solve and throwing at result construction).
+        n_eval = Ref(0)
+        g(x) = (n_eval[] += 1; f(x))
+        @test_throws ArgumentError find_zero(
+            g, NewtonsMethodAD{FT}(FT(1)), TwoPointSolution(), NoTolerance(), 10,
+        )
+        @test n_eval[] == 0
     end
 
     # Pretty printing
     sol =
-        find_zero(x -> x^2 - 4, RegulaFalsiMethod, 0.0, 3.0, -4.0, 5.0, BracketedSolution())
+        find_zero(x -> x^2 - 4, RegulaFalsiMethod, 0.0, 3.0, -4.0, 5.0, TwoPointSolution())
     str = sprint(show, sol)
-    @test occursin("BracketedSolutionResults", str)
+    @test occursin("TwoPointSolutionResults", str)
     @test occursin("Final points", str)
 end
 
@@ -158,7 +201,7 @@ end
 
 @testset "Pre-evaluated endpoints do not allocate" begin
     f_alloc(x) = x^2 - 4.0
-    for M in TWO_POINT_METHODS, soltype in (CompactSolution(), BracketedSolution())
+    for M in TWO_POINT_METHODS, soltype in (CompactSolution(), TwoPointSolution())
         @test fval_alloc_measure(f_alloc, M, soltype) == 0
     end
 end

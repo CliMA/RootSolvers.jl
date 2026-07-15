@@ -54,15 +54,15 @@ These types control the level of detail in the output returned by `find_zero`.
 |:----------------------------|:------------------------------------------|:------------------------------------------------|
 | [`CompactSolution`](@ref)   | Minimal output, GPU-friendly              | **High-performance**, GPU, memory efficiency   |
 | [`VerboseSolution`](@ref)   | Full diagnostics, iteration history       | **Debugging**, analysis, CPU                   |
-| [`BracketedSolution`](@ref) | Final two-point state, GPU-friendly       | **Caller-side convergence policies**, two-point methods |
+| [`TwoPointSolution`](@ref) | Final two-point state, GPU-friendly       | **Caller-side convergence policies**, two-point methods |
 
 ```@docs
 CompactSolution
 VerboseSolution
-BracketedSolution
+TwoPointSolution
 CompactSolutionResults
 VerboseSolutionResults
-BracketedSolutionResults
+TwoPointSolutionResults
 ```
 
 ---
