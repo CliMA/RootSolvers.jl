@@ -7,7 +7,14 @@ version = "1.1.0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[weakdeps]
+Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+
+[extensions]
+RootSolversReactantExt = "Reactant"
+
 [compat]
 ForwardDiff = "0.10, 1"
 Printf = "1"
+Reactant = "0.2"
 julia = "1.10"
