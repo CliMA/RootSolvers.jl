@@ -79,6 +79,9 @@ export method_args, value_deriv, default_tol
 
 import ForwardDiff
 import Printf: @printf
+# `@trace` captures the solver loops for tracing backends (Reactant) and expands to plain
+# Julia control flow everywhere else, so ordinary and GPU execution are unaffected.
+import ReactantCore: @trace, within_compile
 
 base_type(::Type{FT}) where {FT} = FT
 base_type(::Type{FT}) where {T, FT <: ForwardDiff.Dual{<:Any, T}} = base_type(T)
@@ -516,27 +519,35 @@ end
 struct CompactSolution <: SolutionType end
 
 """
-    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+    CompactSolutionResults{FT, B} <: AbstractSolutionResults{FT}
 
 Results type for `CompactSolution` containing minimal output.
+
+`B` is the type of the convergence flag: `Bool` for ordinary Julia numbers, but a traced
+boolean when the solve is compiled by a tracing backend, where convergence is only known
+at run time. It is inferred by the constructor, so `CompactSolutionResults(root, converged)`
+needs no change.
 """
-struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+struct CompactSolutionResults{FT, B} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
     "indicates convergence"
-    converged::Bool
+    converged::B
 end
 SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
 
 function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
-    color = sol.converged ? :green : :red
-    if get(io, :compact, false)
+    # `converged` may be a backend-specific boolean wrapper (see `CompactSolutionResults`);
+    # `Bool` is the identity on `Bool` and materializes the flag for the traced backends.
+    converged = Bool(sol.converged)
+    color = converged ? :green : :red
+    return if get(io, :compact, false)
         # compact printing within a vector or similar
         printstyled(io, sol.root; color)
     else
         # standalone printing
-        status = sol.converged ? "converged" : "failed to converge"
+        status = converged ? "converged" : "failed to converge"
         println(io, "CompactSolutionResults{$FT}:")
         print(io, "├── Status: ")
         printstyled(io, status; color)
@@ -588,16 +599,18 @@ width = abs(sol.x1 - sol.x0)  # final bracket width
 struct TwoPointSolution <: SolutionType end
 
 """
-    TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+    TwoPointSolutionResults{XT, YT, B} <: AbstractSolutionResults{XT}
 
 Results type for `TwoPointSolution`: the root and convergence status plus the final
 two-point state `(x0, x1, y0, y1)` of the solver. 
+
+`B` is the type of the convergence flag; see [`CompactSolutionResults`](@ref).
 """
-struct TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+struct TwoPointSolutionResults{XT, YT, B} <: AbstractSolutionResults{XT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::XT
     "indicates convergence"
-    converged::Bool
+    converged::B
     "residual ``f(x^*)`` at the returned root"
     err::YT
     "final position of the first working point"
@@ -648,13 +661,14 @@ SolutionResults(
 )
 
 function Base.show(io::IO, sol::TwoPointSolutionResults{XT}) where {XT}
-    color = sol.converged ? :green : :red
-    if get(io, :compact, false)
+    converged = Bool(sol.converged)
+    color = converged ? :green : :red
+    return if get(io, :compact, false)
         # compact printing within a vector or similar
         printstyled(io, sol.root; color)
     else
         # standalone printing
-        status = sol.converged ? "converged" : "failed to converge"
+        status = converged ? "converged" : "failed to converge"
         println(io, "TwoPointSolutionResults{$XT}:")
         print(io, "├── Status: ")
         printstyled(io, status; color)
@@ -1798,8 +1812,8 @@ end
     push_history!(x_history, x, soltype)
     push_history!(y_history, y, soltype)
 
-    c = FT(1e-4) # Conservative Armijo constant
-    for i in 1:maxiters
+    c = FT(1.0e-4) # Conservative Armijo constant
+    @trace for i in 1:maxiters
 
         Δx = y / y′ # Full Newton step
 
