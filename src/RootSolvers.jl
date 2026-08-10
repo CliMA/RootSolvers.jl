@@ -85,7 +85,10 @@ base_type(::Type{FT}) where {T, FT <: ForwardDiff.Dual{<:Any, T}} = base_type(T)
 base_type(::Type{FT}) where {T, FT <: AbstractArray{T}} = base_type(T)
 
 # Input types
-const FTypes = Union{Real, AbstractArray}
+#
+# `Number` instead of `Real` to allow use of Reactant's traced numbers,
+# which subtype `Number` and not `Real`.
+const FTypes = Union{Number, AbstractArray}
 
 """
     RootSolvingMethod{FT}
@@ -667,30 +670,20 @@ init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
 init_history(::TwoPointSolution, x) = nothing
 init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
-init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} = nothing
-init_history(::TwoPointSolution, ::Type{FT}) where {FT <: Real} = nothing
+# The history-free solution types accept any iterate type, including the non-`Real`
+# scalar wrappers used by tracing backends (e.g. Reactant's `TracedRNumber`).
+init_history(::CompactSolution, ::Type{FT}) where {FT} = nothing
+init_history(::TwoPointSolution, ::Type{FT}) where {FT} = nothing
 
 function push_history!(
     history::Vector{FT},
     x::FT,
     ::VerboseSolution,
 ) where {FT <: Real}
-    push!(history, x)
+    return push!(history, x)
 end
-function push_history!(
-    history::Nothing,
-    x::FT,
-    ::CompactSolution,
-) where {FT <: Real}
-    nothing
-end
-function push_history!(
-    history::Nothing,
-    x::FT,
-    ::TwoPointSolution,
-) where {FT <: Real}
-    nothing
-end
+push_history!(history::Nothing, x, ::CompactSolution) = nothing
+push_history!(history::Nothing, x, ::TwoPointSolution) = nothing
 
 """
     AbstractTolerance{FT}
