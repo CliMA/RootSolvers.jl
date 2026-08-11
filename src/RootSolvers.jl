@@ -741,10 +741,10 @@ abstract type AbstractTolerance{FT <: FTypes} end
 Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
 """
-    ResidualTolerance{FT} 
+    ResidualTolerance{FT}
 
 A convergence criterion based on the absolute value of the residual (function value).
-The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance (limited to 
+The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance (limited to
 the machine epsilon of the function value type).
 
 This tolerance is appropriate when you want to ensure that the function value is
@@ -756,7 +756,7 @@ sufficiently close to zero, regardless of how close consecutive iterates are.
 # Examples
 ```julia
 tol = ResidualTolerance(1e-10)
-sol = find_zero(x -> x^2 - 4, 
+sol = find_zero(x -> x^2 - 4,
                NewtonsMethodAD{Float64}(1.0),
                CompactSolution(),
                tol)
@@ -769,7 +769,7 @@ end
 """
     (tol::ResidualTolerance)(x1, x2, y)
 
-Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the machine 
+Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the machine
 epsilon of the function value type.
 """
 (tol::ResidualTolerance)(x1, x2, y) =
@@ -777,7 +777,7 @@ epsilon of the function value type.
 
 
 """
-    SolutionTolerance{FT} 
+    SolutionTolerance{FT}
 
 A convergence criterion based on the absolute difference between consecutive iterates.
 The iteration stops when `|x_{n+1} - x_n| < tol`, where `tol` is the specified tolerance.
@@ -792,7 +792,7 @@ sufficiently close, indicating that the solution has stabilized.
 # Examples
 ```julia
 tol = SolutionTolerance(1e-8)
-sol = find_zero(x -> x^3 - 8, 
+sol = find_zero(x -> x^3 - 8,
                SecantMethod{Float64}(1.0, 3.0),
                CompactSolution(),
                tol)
@@ -811,13 +811,13 @@ Evaluates solution tolerance, based on ``|x2-x1|``
     (abs(x2 - x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
-    RelativeSolutionTolerance{FT} 
+    RelativeSolutionTolerance{FT}
 
 A convergence criterion based on the relative difference between consecutive iterates.
-The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
+The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance.
 Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
-This tolerance is appropriate when you want to ensure convergence relative to the magnitude of 
+This tolerance is appropriate when you want to ensure convergence relative to the magnitude of
 the solution, which is useful when the root value might be very large or very small.
 
 # Fields
@@ -830,7 +830,7 @@ the solution, which is useful when the root value might be very large or very sm
 # Examples
 ```julia
 tol = RelativeSolutionTolerance(1e-6)
-sol = find_zero(x -> x^2 - 1e6, 
+sol = find_zero(x -> x^2 - 1e6,
                NewtonsMethodAD{Float64}(500.0),
                CompactSolution(),
                tol)
@@ -849,7 +849,7 @@ Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
     (abs((x2 - x1) / x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
-    RelativeOrAbsoluteSolutionTolerance{FT} 
+    RelativeOrAbsoluteSolutionTolerance{FT}
 
 A robust convergence criterion combining both relative and absolute tolerances.
 The iteration stops when either `|(x_{n+1} - x_n)/x_n| < rtol` OR `|x_{n+1} - x_n| < atol`.
@@ -866,7 +866,7 @@ This tolerance provides robust behavior across different scales of root values:
 ```julia
 # Use relative tolerance of 1e-6 and absolute tolerance of 1e-10
 tol = RelativeOrAbsoluteSolutionTolerance(1e-6, 1e-10)
-sol = find_zero(x -> x^2 - 1e-8, 
+sol = find_zero(x -> x^2 - 1e-8,
                NewtonsMethodAD{Float64}(1e-3),
                CompactSolution(),
                tol)
@@ -891,8 +891,8 @@ on ``|(x2-x1)/x1| || |x2-x1|``
 """
     NoTolerance{FT}
 
-A criterion that forces the solver to run for exactly `maxiters` iterations, irrespective 
-of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where 
+A criterion that forces the solver to run for exactly `maxiters` iterations, irrespective
+of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where
 a data-dependent early exit is undesirable.
 
 Callers assess convergence themselves from the returned state. On the GPU, pair it with
@@ -986,16 +986,16 @@ sol = find_zero(x -> x^3 - 27, NewtonsMethodAD{Float64}(2.0))
 println("∛27 = \$(sol.root)")  # ∛27 = 3.0
 
 # Get detailed iteration history
-sol = find_zero(x -> exp(x) - 2, 
-               NewtonsMethodAD{Float64}(0.5), 
+sol = find_zero(x -> exp(x) - 2,
+               NewtonsMethodAD{Float64}(0.5),
                VerboseSolution())
 println("ln(2) ≈ \$(sol.root) found in \$(sol.iter_performed) iterations")
 
 # Use custom tolerance
 tol = RelativeOrAbsoluteSolutionTolerance(1e-12, 1e-15)
-sol = find_zero(x -> cos(x), 
-               NewtonsMethodAD{Float64}(1.0), 
-               CompactSolution(), 
+sol = find_zero(x -> cos(x),
+               NewtonsMethodAD{Float64}(1.0),
+               CompactSolution(),
                tol)
 println("π/2 ≈ \$(sol.root)")
 
@@ -1136,7 +1136,7 @@ end
 
 Find a root of function `f` using the specified `method_type`.
 
-This interface is particularly useful for broadcasting, allowing you to apply the same 
+This interface is particularly useful for broadcasting, allowing you to apply the same
 method to many problems with different initialization values (e.g., on the GPU).
 
 # Arguments
@@ -1785,7 +1785,7 @@ end
 end
 
 
-# Internal function implementing the main iteration loop for Newton methods (with AD 
+# Internal function implementing the main iteration loop for Newton methods (with AD
 # or analytical derivatives)
 @inline function _find_zero_newton(
     f_value_and_deriv,
@@ -1876,7 +1876,7 @@ end
         push_history!(x_history, x_new, soltype)
         push_history!(y_history, y_new, soltype)
 
-        # Check for convergence 
+        # Check for convergence
         if tol(x, x_new, y_new)
             return SolutionResults(
                 soltype,
