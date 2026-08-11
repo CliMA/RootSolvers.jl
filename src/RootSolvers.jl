@@ -17,7 +17,7 @@ and tolerance criteria.
 - **Newton's Method**: Requires one initial guess and user-provided derivative
 
 # GPU and Broadcasting
-For high-performance applications such as GPU kernels, one can broadcast `find_zero` 
+For high-performance applications such as GPU kernels, one can broadcast `find_zero`
 efficiently by passing the method type directly (e.g., `SecantMethod`).
 
 # Method Selection Guide
@@ -501,8 +501,8 @@ The returned `CompactSolutionResults` object contains the following fields:
 
 # Examples
 ```julia
-sol = find_zero(x -> x^2 - 4, 
-               SecantMethod{Float64}(0.0, 3.0), 
+sol = find_zero(x -> x^2 - 4,
+               SecantMethod{Float64}(0.0, 3.0),
                CompactSolution())
 
 # Access the root
@@ -602,7 +602,7 @@ struct TwoPointSolution <: SolutionType end
     TwoPointSolutionResults{XT, YT, B} <: AbstractSolutionResults{XT}
 
 Results type for `TwoPointSolution`: the root and convergence status plus the final
-two-point state `(x0, x1, y0, y1)` of the solver. 
+two-point state `(x0, x1, y0, y1)` of the solver.
 
 `B` is the type of the convergence flag; see [`CompactSolutionResults`](@ref).
 """
