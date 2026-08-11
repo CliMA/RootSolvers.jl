@@ -402,3 +402,6 @@ include("verify_selector_defaults.jl") # Tests for method selector defaults
 include("test_printing.jl")    # Tests for solution pretty printing
 include("test_robustness.jl")  # Line-search, bracketing-convergence, default_tol fixes
 include("test_fval_inputs.jl") # Pre-evaluated endpoints, TwoPointSolution, NoTolerance
+# Reactant's own device selection is orthogonal to the `ArrayType` switch above; skip on
+# the CUDA CI leg so it isn't run twice.
+ArrayType <: Array && include("test_reactant.jl") # Tracing under Reactant: @jit, broadcast
