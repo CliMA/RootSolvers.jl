@@ -17,7 +17,7 @@ and tolerance criteria.
 - **Newton's Method**: Requires one initial guess and user-provided derivative
 
 # GPU and Broadcasting
-For high-performance applications such as GPU kernels, one can broadcast `find_zero` 
+For high-performance applications such as GPU kernels, one can broadcast `find_zero`
 efficiently by passing the method type directly (e.g., `SecantMethod`).
 
 # Method Selection Guide
@@ -68,7 +68,6 @@ export find_zero,
     NewtonsMethod
 
 
-
 export SolutionType, CompactSolution, VerboseSolution, TwoPointSolution
 export ResidualTolerance,
     SolutionTolerance,
@@ -79,13 +78,19 @@ export method_args, value_deriv, default_tol
 
 import ForwardDiff
 import Printf: @printf
+# `@trace` captures the solver loops forReactant and expands to plain
+# Julia control flow everywhere else, so ordinary and GPU execution are unaffected.
+import ReactantCore: @trace, within_compile, promote_to_traced
 
 base_type(::Type{FT}) where {FT} = FT
 base_type(::Type{FT}) where {T, FT <: ForwardDiff.Dual{<:Any, T}} = base_type(T)
 base_type(::Type{FT}) where {T, FT <: AbstractArray{T}} = base_type(T)
 
 # Input types
-const FTypes = Union{Real, AbstractArray}
+#
+# `Number` instead of `Real` to allow use of Reactant's traced numbers,
+# which subtype `Number` and not `Real`.
+const FTypes = Union{Number, AbstractArray}
 
 """
     RootSolvingMethod{FT}
@@ -415,7 +420,7 @@ println("Last iteration root: ", sol.root_history[end])
 """
 struct VerboseSolution <: SolutionType end
 
-abstract type AbstractSolutionResults{Real} end
+abstract type AbstractSolutionResults{FT} end
 
 """
     VerboseSolutionResults{FT} <: AbstractSolutionResults{FT}
@@ -495,8 +500,8 @@ The returned `CompactSolutionResults` object contains the following fields:
 
 # Examples
 ```julia
-sol = find_zero(x -> x^2 - 4, 
-               SecantMethod{Float64}(0.0, 3.0), 
+sol = find_zero(x -> x^2 - 4,
+               SecantMethod{Float64}(0.0, 3.0),
                CompactSolution())
 
 # Access the root
@@ -513,27 +518,35 @@ end
 struct CompactSolution <: SolutionType end
 
 """
-    CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+    CompactSolutionResults{FT, B} <: AbstractSolutionResults{FT}
 
 Results type for `CompactSolution` containing minimal output.
+
+`B` is the type of the convergence flag: `Bool` for ordinary Julia numbers, but a traced
+boolean when the solve is compiled by a tracing backend, where convergence is only known
+at run time. It is inferred by the constructor, so `CompactSolutionResults(root, converged)`
+needs no change.
 """
-struct CompactSolutionResults{FT} <: AbstractSolutionResults{FT}
+struct CompactSolutionResults{FT, B} <: AbstractSolutionResults{FT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::FT
     "indicates convergence"
-    converged::Bool
+    converged::B
 end
 SolutionResults(soltype::CompactSolution, root, converged, args...) =
     CompactSolutionResults(root, converged)
 
 function Base.show(io::IO, sol::CompactSolutionResults{FT}) where {FT}
-    color = sol.converged ? :green : :red
-    if get(io, :compact, false)
+    # `converged` may be a backend-specific boolean wrapper (see `CompactSolutionResults`);
+    # `Bool` is the identity on `Bool` and materializes the flag for the traced backends.
+    converged = Bool(sol.converged)
+    color = converged ? :green : :red
+    return if get(io, :compact, false)
         # compact printing within a vector or similar
         printstyled(io, sol.root; color)
     else
         # standalone printing
-        status = sol.converged ? "converged" : "failed to converge"
+        status = converged ? "converged" : "failed to converge"
         println(io, "CompactSolutionResults{$FT}:")
         print(io, "├── Status: ")
         printstyled(io, status; color)
@@ -585,16 +598,18 @@ width = abs(sol.x1 - sol.x0)  # final bracket width
 struct TwoPointSolution <: SolutionType end
 
 """
-    TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+    TwoPointSolutionResults{XT, YT, B} <: AbstractSolutionResults{XT}
 
 Results type for `TwoPointSolution`: the root and convergence status plus the final
-two-point state `(x0, x1, y0, y1)` of the solver. 
+two-point state `(x0, x1, y0, y1)` of the solver.
+
+`B` is the type of the convergence flag; see [`CompactSolutionResults`](@ref).
 """
-struct TwoPointSolutionResults{XT, YT} <: AbstractSolutionResults{XT}
+struct TwoPointSolutionResults{XT, YT, B} <: AbstractSolutionResults{XT}
     "solution ``x^*`` of the root of the equation ``f(x^*) = 0``"
     root::XT
     "indicates convergence"
-    converged::Bool
+    converged::B
     "residual ``f(x^*)`` at the returned root"
     err::YT
     "final position of the first working point"
@@ -645,13 +660,14 @@ SolutionResults(
 )
 
 function Base.show(io::IO, sol::TwoPointSolutionResults{XT}) where {XT}
-    color = sol.converged ? :green : :red
-    if get(io, :compact, false)
+    converged = Bool(sol.converged)
+    color = converged ? :green : :red
+    return if get(io, :compact, false)
         # compact printing within a vector or similar
         printstyled(io, sol.root; color)
     else
         # standalone printing
-        status = sol.converged ? "converged" : "failed to converge"
+        status = converged ? "converged" : "failed to converge"
         println(io, "TwoPointSolutionResults{$XT}:")
         print(io, "├── Status: ")
         printstyled(io, status; color)
@@ -667,29 +683,39 @@ init_history(::VerboseSolution, x::FT) where {FT <: Real} = FT[x]
 init_history(::CompactSolution, x) = nothing
 init_history(::TwoPointSolution, x) = nothing
 init_history(::VerboseSolution, ::Type{FT}) where {FT <: Real} = FT[]
-init_history(::CompactSolution, ::Type{FT}) where {FT <: Real} = nothing
-init_history(::TwoPointSolution, ::Type{FT}) where {FT <: Real} = nothing
+# The history-free solution types accept any iterate type, including the non-`Real`
+# scalar wrappers used by tracing backends (e.g. Reactant's `TracedRNumber`).
+init_history(::CompactSolution, ::Type{FT}) where {FT} = nothing
+init_history(::TwoPointSolution, ::Type{FT}) where {FT} = nothing
 
 function push_history!(
     history::Vector{FT},
     x::FT,
     ::VerboseSolution,
 ) where {FT <: Real}
-    push!(history, x)
+    return push!(history, x)
 end
+push_history!(history::Nothing, x, ::CompactSolution) = nothing
+push_history!(history::Nothing, x, ::TwoPointSolution) = nothing
+
+# Loop-carried scalars must already be traced values on entry to a `@trace` loop: Reactant
+# propagates loop state by mutating the traced wrapper, so a plain `Int`/`Bool` would keep
+# its pre-loop value. Identity (and free) off the tracing path.
+@inline _loop_state(x) = within_compile() ? promote_to_traced(x) : x
+
+# Masked history push: `keep = false` discards the sample. Used where a kernel used to
+# `return` before logging a rejected iterate. The history-free solution types ignore
+# `keep`, so a traced (non-`Bool`) `keep` never reaches a branch.
+push_history!(history::Nothing, x, ::CompactSolution, keep) = nothing
+push_history!(history::Nothing, x, ::TwoPointSolution, keep) = nothing
 function push_history!(
-    history::Nothing,
+    history::Vector{FT},
     x::FT,
-    ::CompactSolution,
+    ::VerboseSolution,
+    keep,
 ) where {FT <: Real}
-    nothing
-end
-function push_history!(
-    history::Nothing,
-    x::FT,
-    ::TwoPointSolution,
-) where {FT <: Real}
-    nothing
+    keep && push!(history, x)
+    return history
 end
 
 """
@@ -734,10 +760,10 @@ abstract type AbstractTolerance{FT <: FTypes} end
 Base.broadcastable(tol::AbstractTolerance) = Ref(tol)
 
 """
-    ResidualTolerance{FT} 
+    ResidualTolerance{FT}
 
 A convergence criterion based on the absolute value of the residual (function value).
-The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance (limited to 
+The iteration stops when `|f(x)| < tol`, where `tol` is the specified tolerance (limited to
 the machine epsilon of the function value type).
 
 This tolerance is appropriate when you want to ensure that the function value is
@@ -749,7 +775,7 @@ sufficiently close to zero, regardless of how close consecutive iterates are.
 # Examples
 ```julia
 tol = ResidualTolerance(1e-10)
-sol = find_zero(x -> x^2 - 4, 
+sol = find_zero(x -> x^2 - 4,
                NewtonsMethodAD{Float64}(1.0),
                CompactSolution(),
                tol)
@@ -762,7 +788,7 @@ end
 """
     (tol::ResidualTolerance)(x1, x2, y)
 
-Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the machine 
+Evaluates residual tolerance, based on ``|f(x)|``, limiting the residual to the machine
 epsilon of the function value type.
 """
 (tol::ResidualTolerance)(x1, x2, y) =
@@ -770,7 +796,7 @@ epsilon of the function value type.
 
 
 """
-    SolutionTolerance{FT} 
+    SolutionTolerance{FT}
 
 A convergence criterion based on the absolute difference between consecutive iterates.
 The iteration stops when `|x_{n+1} - x_n| < tol`, where `tol` is the specified tolerance.
@@ -785,7 +811,7 @@ sufficiently close, indicating that the solution has stabilized.
 # Examples
 ```julia
 tol = SolutionTolerance(1e-8)
-sol = find_zero(x -> x^3 - 8, 
+sol = find_zero(x -> x^3 - 8,
                SecantMethod{Float64}(1.0, 3.0),
                CompactSolution(),
                tol)
@@ -804,13 +830,13 @@ Evaluates solution tolerance, based on ``|x2-x1|``
     (abs(x2 - x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
-    RelativeSolutionTolerance{FT} 
+    RelativeSolutionTolerance{FT}
 
 A convergence criterion based on the relative difference between consecutive iterates.
-The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance. 
+The iteration stops when `|(x_{n+1} - x_n)/x_n| < tol`, where `tol` is the specified tolerance.
 Convergence is also triggered if |f(x)| is smaller than the machine epsilon for the value type.
 
-This tolerance is appropriate when you want to ensure convergence relative to the magnitude of 
+This tolerance is appropriate when you want to ensure convergence relative to the magnitude of
 the solution, which is useful when the root value might be very large or very small.
 
 # Fields
@@ -823,7 +849,7 @@ the solution, which is useful when the root value might be very large or very sm
 # Examples
 ```julia
 tol = RelativeSolutionTolerance(1e-6)
-sol = find_zero(x -> x^2 - 1e6, 
+sol = find_zero(x -> x^2 - 1e6,
                NewtonsMethodAD{Float64}(500.0),
                CompactSolution(),
                tol)
@@ -842,7 +868,7 @@ Evaluates solution tolerance, based on ``|(x2-x1)/x1|``
     (abs((x2 - x1) / x1) < tol.tol) | (abs(y) < eps(typeof(y)))
 
 """
-    RelativeOrAbsoluteSolutionTolerance{FT} 
+    RelativeOrAbsoluteSolutionTolerance{FT}
 
 A robust convergence criterion combining both relative and absolute tolerances.
 The iteration stops when either `|(x_{n+1} - x_n)/x_n| < rtol` OR `|x_{n+1} - x_n| < atol`.
@@ -859,7 +885,7 @@ This tolerance provides robust behavior across different scales of root values:
 ```julia
 # Use relative tolerance of 1e-6 and absolute tolerance of 1e-10
 tol = RelativeOrAbsoluteSolutionTolerance(1e-6, 1e-10)
-sol = find_zero(x -> x^2 - 1e-8, 
+sol = find_zero(x -> x^2 - 1e-8,
                NewtonsMethodAD{Float64}(1e-3),
                CompactSolution(),
                tol)
@@ -884,8 +910,8 @@ on ``|(x2-x1)/x1| || |x2-x1|``
 """
     NoTolerance{FT}
 
-A criterion that forces the solver to run for exactly `maxiters` iterations, irrespective 
-of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where 
+A criterion that forces the solver to run for exactly `maxiters` iterations, irrespective
+of tolerance reached, and returns `converged = false`. This is intended for GPU kernels where
 a data-dependent early exit is undesirable.
 
 Callers assess convergence themselves from the returned state. On the GPU, pair it with
@@ -979,16 +1005,16 @@ sol = find_zero(x -> x^3 - 27, NewtonsMethodAD{Float64}(2.0))
 println("∛27 = \$(sol.root)")  # ∛27 = 3.0
 
 # Get detailed iteration history
-sol = find_zero(x -> exp(x) - 2, 
-               NewtonsMethodAD{Float64}(0.5), 
+sol = find_zero(x -> exp(x) - 2,
+               NewtonsMethodAD{Float64}(0.5),
                VerboseSolution())
 println("ln(2) ≈ \$(sol.root) found in \$(sol.iter_performed) iterations")
 
 # Use custom tolerance
 tol = RelativeOrAbsoluteSolutionTolerance(1e-12, 1e-15)
-sol = find_zero(x -> cos(x), 
-               NewtonsMethodAD{Float64}(1.0), 
-               CompactSolution(), 
+sol = find_zero(x -> cos(x),
+               NewtonsMethodAD{Float64}(1.0),
+               CompactSolution(),
                tol)
 println("π/2 ≈ \$(sol.root)")
 
@@ -1129,7 +1155,7 @@ end
 
 Find a root of function `f` using the specified `method_type`.
 
-This interface is particularly useful for broadcasting, allowing you to apply the same 
+This interface is particularly useful for broadcasting, allowing you to apply the same
 method to many problems with different initialization values (e.g., on the GPU).
 
 # Arguments
@@ -1434,7 +1460,7 @@ end
 # points. Non-finite endpoints are not passed to `f`; the sentinel `Inf` residuals make
 # the kernels' input guards return a failed solution instead.
 @inline function _eval_endpoints(f::F, x0, x1) where {F}
-    if (!isfinite(x0)) | (!isfinite(x1))
+    if !within_compile() && ((!isfinite(x0)) | (!isfinite(x1)))
         FT = typeof(x0)
         return FT(Inf), FT(Inf)
     end
@@ -1483,7 +1509,11 @@ end
     maxiters,
 )
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1))
+    # `copy` for Reactant, allocation-free
+    x0, x1, y0, y1 = copy(x0), copy(x1), copy(y0), copy(y1)
+    # No Reactant -> allow return of SolutionResults
+    if !within_compile() &&
+       ((!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1)))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1492,7 +1522,7 @@ end
         )
     end
 
-    if y0 * y1 >= 0
+    if !within_compile() && (y0 * y1 >= 0)
         # Return failed solution instead of error for GPU compatibility.
         # Pick the endpoint with the smaller residual as the best guess.
         x_history = init_history(soltype, x0)
@@ -1514,14 +1544,25 @@ end
 
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
-    lastside = 0
 
+    bad = (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1))
     # Best point so far: the smaller-residual endpoint. This is also the (well-defined)
     # returned root when `maxiters <= 0`.
-    x = ifelse(abs(y0) < abs(y1), x0, x1)
-    y = ifelse(abs(y0) < abs(y1), y0, y1)
-    x_prev = x0 # previous iterate estimate, for the step-based convergence test
-    for i in 1:maxiters
+    x_best = ifelse(abs(y0) < abs(y1), x0, x1)
+    y_best = ifelse(abs(y0) < abs(y1), y0, y1)
+    root = ifelse(bad, x0, x_best)
+    err = ifelse(bad, FT(Inf), y_best)
+    # Loop-carried result state to allow Reactant early exit
+    done = bad | (y0 * y1 >= 0)
+    converged = _loop_state(false)
+    i = _loop_state(0)
+    lastside = _loop_state(0)
+    x_prev = copy(x0)
+
+    x = x_best
+    y = y_best
+    @trace while (i < maxiters) & !done
+        i += 1
         x = update_x_rule(x0, y0, x1, y1)
         y = f(x)
 
@@ -1542,17 +1583,15 @@ end
         # Converge on the change between successive estimates (and on an exact/near-exact
         # root). The bracket width is not a reliable criterion for Regula Falsi, where one
         # endpoint can stay fixed and the width never shrinks.
-        if tol(x_prev, x, y)
-            return SolutionResults(
-                soltype, x, true, y, i, x_history, y_history, x0, x1, y0, y1,
-            )
-        end
-
-        x_prev = x
+        converged = tol(x_prev, x, y)
+        root = copy(x)
+        err = copy(y)
+        done = copy(converged)
+        x_prev = copy(x)
     end
 
     return SolutionResults(
-        soltype, x, false, y, maxiters, x_history, y_history, x0, x1, y0, y1,
+        soltype, root, converged, err, i, x_history, y_history, x0, x1, y0, y1,
     )
 end
 
@@ -1563,7 +1602,12 @@ end
 # via `_eval_endpoints`).
 @inline function _find_zero_brent(f, x0, x1, fa0, fb0, soltype, tol, maxiters)
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(fa0)) | (!isfinite(fb0))
+    # `copy` for Reactant, allocation-free
+    x0, x1, fa0, fb0 = copy(x0), copy(x1), copy(fa0), copy(fb0)
+
+    # Only allow early return for non-Reactant
+    if !within_compile() &&
+       ((!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(fa0)) | (!isfinite(fb0)))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1575,7 +1619,8 @@ end
     a, b = x0, x1
     fa, fb = fa0, fb0
 
-    if fa * fb >= 0
+    # Only allow early return for non-Reactant
+    if !within_compile() && (fa * fb >= 0)
         # Return failed solution instead of error for GPU compatibility.
         # Pick the endpoint with the smaller residual as the best guess.
         x_history = init_history(soltype, a)
@@ -1595,11 +1640,19 @@ end
         )
     end
 
+    # Mirror both pre-loop guards above for the traced path
+    bad = (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(fa0)) | (!isfinite(fb0))
+    no_bracket = fa0 * fb0 >= 0
+    skip = bad | no_bracket
+    best = abs(fa0) < abs(fb0)
+    root = ifelse(bad, x0, ifelse(no_bracket, ifelse(best, x0, x1), b))
+    err = ifelse(bad, FT(Inf), ifelse(no_bracket, ifelse(best, fa0, fb0), fb))
+
     cond_init_swap = abs(fa) < abs(fb)
-    a_init = ifelse(cond_init_swap, b, a)
-    b_init = ifelse(cond_init_swap, a, b)
-    fa_init = ifelse(cond_init_swap, fb, fa)
-    fb_init = ifelse(cond_init_swap, fa, fb)
+    a_init = ifelse(skip, x0, ifelse(cond_init_swap, b, a))
+    b_init = ifelse(skip, x1, ifelse(cond_init_swap, a, b))
+    fa_init = ifelse(skip, fa0, ifelse(cond_init_swap, fb, fa))
+    fb_init = ifelse(skip, fb0, ifelse(cond_init_swap, fa, fb))
     a, b, fa, fb = a_init, b_init, fa_init, fb_init
 
     x_history = init_history(soltype, a)
@@ -1607,29 +1660,17 @@ end
     push_history!(x_history, b, soltype)
     push_history!(y_history, fb, soltype)
 
-    c = a
-    fc = fa
+    # Brent tests convergence at the top of the loop, so it becomes the loop condition
+    # directly (no masking, no extra residual evaluations).
+    converged = tol(a, b, fb) | (fb == 0)
+    i = _loop_state(0)
+    c = copy(a)
+    fc = copy(fa)
     d = b - a
-    e = d
+    e = copy(d)
 
-    for i in 1:maxiters
-        # Convergence check
-        if tol(a, b, fb) | (fb == 0)
-            return SolutionResults(
-                soltype,
-                b,
-                true,
-                fb,
-                i,
-                x_history,
-                y_history,
-                a,
-                b,
-                fa,
-                fb,
-            )
-        end
-
+    @trace while (i < maxiters) & !converged & !skip
+        i += 1
         # On GPUs, `ifelse` is often more performant than `if-else` blocks
         # by avoiding branch divergence.
         s = ifelse(
@@ -1676,14 +1717,27 @@ end
         fa_new_swap = ifelse(cond_swap, fb, fa)
         fb_new_swap = ifelse(cond_swap, fa, fb)
         a, fa, b, fb = a_new_swap, fa_new_swap, b_new_swap, fb_new_swap
+
+        converged = tol(a, b, fb) | (fb == 0)
+        root = copy(b)
+        err = copy(fb)
     end
+
+    # The `i+1` reproduces the original accounting exactly: the check that fires is the
+    # `(i+1)`-th (Brent tests convergence before incrementing its iteration count);
+    # exhaustion reports `maxiters` with `converged = false`, matching today's behavior of
+    # never checking convergence on the final iteration (that would be the top of a
+    # hypothetical iteration `maxiters+1`, which never runs). `skip` (bad input / no
+    # bracket) always reports `iter = 0`, matching the ordinary-path early returns.
+    converged = converged & (i < maxiters) & !skip
+    iter = ifelse(skip, 0, ifelse(converged, i + 1, maxiters))
 
     return SolutionResults(
         soltype,
-        b,
-        false,
-        fb,
-        maxiters,
+        root,
+        converged,
+        err,
+        iter,
         x_history,
         y_history,
         a,
@@ -1698,7 +1752,12 @@ end
 # user or computed by the standard `find_zero` entry points via `_eval_endpoints`).
 @inline function _find_zero_secant(f, x0, x1, y0, y1, soltype, tol, maxiters)
     FT = typeof(x0)
-    if (!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1))
+    # `copy` for Reactant, allocation-free
+    x0, x1, y0, y1 = copy(x0), copy(x1), copy(y0), copy(y1)
+
+    # No early return when traced (Reactant)
+    if !within_compile() &&
+       ((!isfinite(x0)) | (!isfinite(x1)) | (!isfinite(y0)) | (!isfinite(y1)))
         y = FT(Inf)
         x_history = init_history(soltype, FT)
         y_history = init_history(soltype, FT)
@@ -1710,75 +1769,52 @@ end
     x_history = init_history(soltype, x0)
     y_history = init_history(soltype, y0)
 
-    for i in 1:maxiters
+    converged = _loop_state(false)
+    stalled = _loop_state(false)
+    i = _loop_state(0)
+
+    @trace while (i < maxiters) & !converged & !stalled
+        i += 1
         Δx = x1 - x0
         Δy = y1 - y0
+        stalled = abs(Δy) <= 100 * eps(y1)
 
-        if abs(Δy) <= 100 * eps(y1)
-            # Exiting because the function is flat. This is a stall.
-            # The method has only "converged" if the residual is already small.
-            converged = tol(x0, x1, y1) # Check for convergence
-            return SolutionResults(
-                soltype,
-                x1,
-                converged,
-                y1,
-                i,
-                x_history,
-                y_history,
-                x0,
-                x1,
-                y0,
-                y1,
-            )
+        # Exiting because the function is flat is a stall: `x0`/`y0` are not advanced
+        # and no new point is logged
+        if within_compile()
+            x0_next = ifelse(stalled, x0, x1)
+            y0_next = ifelse(stalled, y0, y1)
+            # `x1_next` resolves to the untouched `x1` when stalled, so `f` is never
+            # evaluated at the ill-conditioned candidate a near-zero `Δy` would give.
+            x1_next = ifelse(stalled, x1, x1 - y0_next * Δx / Δy)
+            y1_next = ifelse(stalled, y1, f(x1_next))
+
+            # Only log .._next if stalled is false
+            push_history!(x_history, x1_next, soltype, !stalled)
+            push_history!(y_history, y1_next, soltype, !stalled)
+            x0, y0, x1, y1 = x0_next, y0_next, x1_next, y1_next
+        elseif !stalled
+            # Update x0, y0 to the "previous" state for the next iteration
+            # and for the tolerance check below.
+            x0, y0 = x1, y1
+            # Update x1 in-place using the now-stored previous state in y0.
+            x1 -= y0 * Δx / Δy
+            y1 = f(x1)
+            push_history!(x_history, x1, soltype)
+            push_history!(y_history, y1, soltype)
         end
 
-        # Update x0, y0 to the "previous" state for the next iteration
-        # and for the tolerance check below.
-        x0, y0 = x1, y1
-
-        # Update x1 in-place using the now-stored previous state in y0.
-        x1 -= y0 * Δx / Δy
-        y1 = f(x1)
-
-        push_history!(x_history, x1, soltype)
-        push_history!(y_history, y1, soltype)
-
-        # Check for convergence
-        if tol(x0, x1, y1)
-            return SolutionResults(
-                soltype,
-                x1,
-                true,
-                y1,
-                i,
-                x_history,
-                y_history,
-                x0,
-                x1,
-                y0,
-                y1,
-            )
-        end
+        # Check for convergence.
+        converged = tol(x0, x1, y1)
     end
 
     return SolutionResults(
-        soltype,
-        x1,
-        false,
-        y1,
-        maxiters,
-        x_history,
-        y_history,
-        x0,
-        x1,
-        y0,
-        y1,
+        soltype, x1, converged, y1, i, x_history, y_history, x0, x1, y0, y1,
     )
 end
 
 
-# Internal function implementing the main iteration loop for Newton methods (with AD 
+# Internal function implementing the main iteration loop for Newton methods (with AD
 # or analytical derivatives)
 @inline function _find_zero_newton(
     f_value_and_deriv,
@@ -1789,12 +1825,14 @@ end
     maxiters,
 )
     FT = typeof(x0)
+    # `copy` for Reactant, allocation-free
+    x0 = copy(x0)
     x_history = init_history(soltype, FT)
     y_history = init_history(soltype, FT)
 
-    if !isfinite(x0)
-        y = FT(Inf)
-        return SolutionResults(soltype, x0, false, y, 0, x_history, y_history)
+    # No early return when traced (Reactant)
+    if !within_compile() && !isfinite(x0)
+        return SolutionResults(soltype, x0, false, FT(Inf), 0, x_history, y_history)
     end
 
     # Initial state
@@ -1805,8 +1843,17 @@ end
     push_history!(x_history, x, soltype)
     push_history!(y_history, y, soltype)
 
-    c = FT(1e-4) # Conservative Armijo constant
-    for i in 1:maxiters
+    # Define (possibly) traced loop-carried variables for Reactant.
+    x0_finite = isfinite(x0)
+    root = copy(x0)
+    err = ifelse(x0_finite, copy(y), FT(Inf))
+    converged = _loop_state(false)
+    done = !x0_finite
+    i = _loop_state(0)
+
+    c = FT(1.0e-4) # Conservative Armijo constant
+    @trace while (i < maxiters) & !done
+        i += 1
 
         Δx = y / y′ # Full Newton step
 
@@ -1814,17 +1861,13 @@ end
         # derivative that makes `Δx` non-finite — fall back to a secant-style step
         # built from a finite-difference slope over a small perturbation. Finite-but-
         # small derivatives are handled by the step limiting and line search below.
-        # The fallback is computed inline, in the same loop, which keeps the kernel a
-        # single iteration loop (lower register pressure and higher occupancy when
-        # broadcast on the GPU).
-        if !isfinite(Δx)
-            # Relative perturbation, scale-invariant for normal `x`. Floor it to
-            # `sqrt(eps)` only if `x * sqrt(eps)` vanishes (x == 0, or x so subnormal
-            # the product underflows), which would otherwise give a zero/NaN slope.
-            h = x * sqrt(eps(FT))
-            h = ifelse(iszero(h), sqrt(eps(FT)), h)
-            slope = (f_value_only(x + h) - y) / h
-            Δx = y / slope
+        # Tracing cannot branch on `isfinite(Δx)`, so there the slope is always
+        # evaluated and selected with `ifelse`; the normal path keeps the
+        # conditional evaluation.
+        if within_compile()
+            Δx = ifelse(isfinite(Δx), Δx, y / _fd_slope(f_value_only, x, y, FT))
+        elseif !isfinite(Δx)
+            Δx = y / _fd_slope(f_value_only, x, y, FT)
         end
 
         # --- Step Limiting for Robustness ---
@@ -1836,12 +1879,12 @@ end
         x_new = x - α * Δx
         y_new = f_value_only(x_new)
         max_backtrack = 5
-        j = 0
+        j = _loop_state(0)
         # Keep backtracking while the trial point is unacceptable — either non-finite
         # or an insufficient decrease in `|f|` — and the step is not yet negligible.
         # A non-finite trial must *continue* the search (shrink `α`), not stop it, so
         # that a step overshooting into a non-finite region can recover.
-        while j < max_backtrack && (
+        @trace while (j < max_backtrack) & (
             ((!isfinite(y_new)) | (abs(y_new) > abs(y) * (FT(1) - c * α))) &
             (α > eps(FT))
         )
@@ -1851,52 +1894,39 @@ end
             j += 1
         end
 
-        # If the line search failed to find a finite point,
-        # the original point `x` is the best we can do. Abort.
-        if !isfinite(y_new)
-            return SolutionResults(
-                soltype,
-                x,
-                false,
-                y,
-                i,
-                x_history,
-                y_history,
-            )
+        # If the line search failed to find a finite point, `x` is the best we can do:
+        # abort with it, and do not log the rejected point.
+        failed = !isfinite(y_new)
+        # Only log .._new if the it succeeded (failed = false)
+        push_history!(x_history, x_new, soltype, !failed)
+        push_history!(y_history, y_new, soltype, !failed)
+
+        converged = tol(x, x_new, y_new) & !failed
+        root = ifelse(failed, x, x_new)
+        err = ifelse(failed, y, y_new)
+        done = failed | converged
+
+        # Only add ifesle behaviour when traced,
+        # avoid unnecessary calculation when not traced
+        if within_compile()
+            x_next = ifelse(done, x, x_new)
+            y, y′ = f_value_and_deriv(x_next)
+            x = x_next
+        elseif !done
+            x = x_new
+            y, y′ = f_value_and_deriv(x)
         end
-
-        # Log the accepted new point
-        push_history!(x_history, x_new, soltype)
-        push_history!(y_history, y_new, soltype)
-
-        # Check for convergence 
-        if tol(x, x_new, y_new)
-            return SolutionResults(
-                soltype,
-                x_new,
-                true,
-                y_new,
-                i,
-                x_history,
-                y_history,
-            )
-        end
-
-        # Update for next iteration
-        x = x_new
-        y, y′ = f_value_and_deriv(x)
     end
 
-    y_final = f_value_only(x)
-    return SolutionResults(
-        soltype,
-        x,
-        false,
-        y_final,
-        maxiters,
-        x_history,
-        y_history,
-    )
+    return SolutionResults(soltype, root, converged, err, i, x_history, y_history)
+end
+
+@inline function _fd_slope(f_value_only, x, y, FT)
+    # Relative perturbation, scale-invariant for normal `x`; floored to `sqrt(eps)` only if
+    # `x * sqrt(eps)` vanishes, which would otherwise give a zero/NaN slope.
+    h = x * sqrt(eps(FT))
+    h = ifelse(iszero(h), sqrt(eps(FT)), h)
+    return (f_value_only(x + h) - y) / h
 end
 
 """
