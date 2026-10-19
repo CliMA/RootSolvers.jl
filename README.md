@@ -23,8 +23,8 @@ RootSolvers.jl provides robust, efficient numerical methods for finding roots of
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/RootSolvers.jl/dev/
 
-[version-img]: https://juliahub.com/docs/General/RootSolvers/stable/version.svg
-[version-url]: https://juliahub.com/ui/Packages/General/RootSolvers
+[version-img]: https://img.shields.io/github/v/release/CliMA/RootSolvers.jl
+[version-url]: https://github.com/CliMA/RootSolvers.jl/releases
 
 [license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
 [license-url]: https://github.com/CliMA/RootSolvers.jl/blob/main/LICENSE
