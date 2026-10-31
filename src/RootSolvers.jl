@@ -78,7 +78,7 @@ export method_args, value_deriv, default_tol
 
 import ForwardDiff
 import Printf: @printf
-# `@trace` captures the solver loops forReactant and expands to plain
+# `@trace` captures the solver loops for Reactant and expands to plain
 # Julia control flow everywhere else, so ordinary and GPU execution are unaffected.
 import ReactantCore: @trace, within_compile, promote_to_traced
 
