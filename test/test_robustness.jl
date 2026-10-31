@@ -122,3 +122,26 @@ end
         @test default_tol(ForwardDiff.Dual{Nothing, FT, 2}).tol == val
     end
 end
+
+@testset "Brent returns the best endpoint when the bracket is already converged" begin
+    # The initial swap puts the smaller-residual endpoint in `b`; when the starting bracket
+    # already satisfies `tol` the loop never runs, so the reported root must be that `b`,
+    # not the second user-supplied endpoint.
+    for tol in (ResidualTolerance(1e-10), SolutionTolerance(10.0))
+        sol = find_zero(identity, BrentsMethod(-1e-12, 1.0), TwoPointSolution(), tol)
+        @test sol.converged
+        @test sol.root == -1e-12
+        @test sol.err == -1e-12
+    end
+    # With no iterations allowed, the best endpoint is still the returned root.
+    maxiters = 0
+    sol = find_zero(
+        identity,
+        BrentsMethod(-1e-12, 1.0),
+        TwoPointSolution(),
+        default_tol(Float64),
+        maxiters,
+    )
+    @test !sol.converged
+    @test sol.root == -1e-12
+end

@@ -1645,8 +1645,6 @@ end
     no_bracket = fa0 * fb0 >= 0
     skip = bad | no_bracket
     best = abs(fa0) < abs(fb0)
-    root = ifelse(bad, x0, ifelse(no_bracket, ifelse(best, x0, x1), b))
-    err = ifelse(bad, FT(Inf), ifelse(no_bracket, ifelse(best, fa0, fb0), fb))
 
     cond_init_swap = abs(fa) < abs(fb)
     a_init = ifelse(skip, x0, ifelse(cond_init_swap, b, a))
@@ -1654,6 +1652,10 @@ end
     fa_init = ifelse(skip, fa0, ifelse(cond_init_swap, fb, fa))
     fb_init = ifelse(skip, fb0, ifelse(cond_init_swap, fa, fb))
     a, b, fa, fb = a_init, b_init, fa_init, fb_init
+
+    # Initialize the result from the post-swap 
+    root = ifelse(bad, x0, ifelse(no_bracket, ifelse(best, x0, x1), b))
+    err = ifelse(bad, FT(Inf), ifelse(no_bracket, ifelse(best, fa0, fb0), fb))
 
     x_history = init_history(soltype, a)
     y_history = init_history(soltype, fa)
