@@ -3,6 +3,9 @@
 main
 -------
 
+- CI: Buildkite runs Julia 1.13. GitHub Actions tests Julia 1.10 and 1.13, and
+  the docs build on 1.13.
+
 v1.1.0
 -------
 
