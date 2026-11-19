@@ -26,11 +26,14 @@ jobs:
       matrix:
         version:
           - '1.10'
-          - '1.12'
+          - '1.13'
         os:
           - ubuntu-latest
-          - macOS-latest
           - windows-latest
+          # Org-wide macOS runner limit: run macOS only on pushes (main, tags).
+          - ${{ github.event_name == 'push' && 'macOS-latest' || '' }}
+        exclude:
+          - os: ''
 
     steps:
       - name: Checkout
